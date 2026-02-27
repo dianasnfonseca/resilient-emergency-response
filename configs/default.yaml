@@ -1,0 +1,86 @@
+# ERCS Default Experiment Configuration
+# =====================================
+# Usage: python scripts/run_experiment.py --config configs/default.yaml
+
+experiment_name: "ercs_default"
+description: "Default ERCS experiment comparing adaptive vs baseline coordination"
+
+# Algorithm variants to compare
+algorithms:
+  - algorithm_type: adaptive
+    enabled: true
+  - algorithm_type: baseline
+    enabled: true
+
+# Connectivity scenarios (Karaman et al., 2026 - Turkey earthquake)
+connectivity_scenarios:
+  - connectivity_level: 0.75  # Mild: ~73% post-earthquake
+    num_runs: 30
+  - connectivity_level: 0.40  # Moderate: 48-hour milestone
+    num_runs: 30
+  - connectivity_level: 0.20  # Severe: near worst-case
+    num_runs: 30
+
+# Phase 1: Network Topology (Ullah & Qayyum, 2022)
+network:
+  primary_node_count: 50
+  simulation_area:
+    width_m: 3000.0
+    height_m: 1500.0
+  incident_zone:
+    width_m: 700.0
+    height_m: 600.0
+    origin_x: 0.0
+    origin_y: 450.0
+  coordination_zone:
+    width_m: 50.0
+    height_m: 50.0
+    origin_x: 2900.0
+    origin_y: 725.0
+  coordination_node_count: 2
+  mobile_responder_count: 48
+  radio_range_m: 100.0
+  buffer_size_bytes: 5242880  # 5 MB
+  message_size_bytes: 512000  # 500 kB
+  mobility_model: random_waypoint
+  speed_min_mps: 0.0
+  speed_max_mps: 20.0
+
+# Phase 2: Communication Layer (Kumar et al., 2023)
+communication:
+  routing_protocol: prophet
+  prophet:
+    p_init: 0.75
+    beta: 0.25
+    gamma: 0.98
+  message_ttl_seconds: 18000  # 300 minutes
+  transmit_speed_bps: 2000000  # 2 Mbps
+  update_interval_seconds: 0.1
+  buffer_drop_policy: drop_oldest
+
+# Phase 3: Scenario Generation
+scenario:
+  scenario_type: generic_emergency
+  message_generation_model: poisson
+  message_rate_per_minute: 2.0  # Kumar et al. (2023)
+  urgency_distribution:
+    high: 0.20   # Li et al. (2025)
+    medium: 0.50
+    low: 0.30
+  simulation_duration_seconds: 6000  # Ullah & Qayyum (2022)
+  warmup_period_seconds: 0
+  runs_per_configuration: 30  # Law (2015)
+
+# Phase 4: Coordination Layer
+coordination:
+  update_interval_seconds: 1800  # 30 min (Kaji et al., 2025)
+  priority_levels: 3
+  available_path_threshold: 0.0
+  proximity_method: euclidean
+  adaptive_task_order: urgency_first
+  baseline_task_order: fcfs
+
+# Output settings
+output_directory: "./outputs"
+log_level: INFO
+master_random_seed: 42
