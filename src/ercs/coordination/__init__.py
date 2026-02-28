@@ -1,1 +1,57 @@
-"""Coordination algorithms module (Phase 4)."""
+"""
+Coordination Layer (Phase 4).
+
+This module implements task assignment algorithms for emergency response
+coordination, comparing adaptive (network-aware) and baseline (proximity-only)
+approaches.
+
+Classes:
+    CoordinatorBase: Abstract base class for coordinators
+    AdaptiveCoordinator: Network-aware urgency-first assignment
+    BaselineCoordinator: Proximity-only FCFS assignment
+    CoordinationManager: Manages coordination cycles
+    Assignment: Task assignment record
+    CoordinationEvent: Event log entry
+
+Protocols:
+    NetworkStateProvider: Interface for network state queries
+    ResponderLocator: Interface for responder location queries
+
+Enums:
+    EventType: Types of coordination events
+
+Factory Functions:
+    create_coordinator: Create coordinator by algorithm type
+
+Sources:
+    - Kaji et al. (2025): Distributed architecture, update interval
+    - Rosas et al. (2023): Priority levels
+    - Ullah & Qayyum (2022): Path availability threshold
+    - Keykhaei et al. (2024): Proximity calculation
+"""
+
+from ercs.coordination.algorithms import (
+    AdaptiveCoordinator,
+    Assignment,
+    BaselineCoordinator,
+    CoordinationEvent,
+    CoordinationManager,
+    CoordinatorBase,
+    EventType,
+    NetworkStateProvider,
+    ResponderLocator,
+    create_coordinator,
+)
+
+__all__ = [
+    "AdaptiveCoordinator",
+    "Assignment",
+    "BaselineCoordinator",
+    "CoordinationEvent",
+    "CoordinationManager",
+    "CoordinatorBase",
+    "EventType",
+    "NetworkStateProvider",
+    "ResponderLocator",
+    "create_coordinator",
+]

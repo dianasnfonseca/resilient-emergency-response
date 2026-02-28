@@ -139,6 +139,25 @@ class NetworkTopology:
             if node.node_type == node_type:
                 yield node
 
+    def get_all_node_ids(self) -> list[str]:
+        """Get list of all node IDs."""
+        return list(self.nodes.keys())
+
+    def get_coordination_node_ids(self) -> list[str]:
+        """Get list of coordination node IDs."""
+        return list(self._coordination_nodes)
+
+    def get_mobile_responder_ids(self) -> list[str]:
+        """Get list of mobile responder node IDs."""
+        return list(self._mobile_nodes)
+
+    def get_node_position(self, node_id: str) -> tuple[float, float] | None:
+        """Get (x, y) position of a node."""
+        node = self.nodes.get(node_id)
+        if node is None:
+            return None
+        return (node.x, node.y)
+
 
 class TopologyGenerator:
     """
