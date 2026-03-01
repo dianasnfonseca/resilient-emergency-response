@@ -29,10 +29,23 @@ from ercs.network.topology import (
     generate_topology,
 )
 
+from ercs.network.mobility import (
+    MobilityManager,
+    MobileNodeState,
+    MobilityState,
+    Waypoint,
+    calculate_encounters,
+)
+
 __all__ = [
     "NetworkTopology",
     "Node",
     "NodeType",
     "TopologyGenerator",
     "generate_topology",
+    "MobilityManager",
+    "MobileNodeState",
+    "MobilityState",
+    "Waypoint",
+    "calculate_encounters",
 ]

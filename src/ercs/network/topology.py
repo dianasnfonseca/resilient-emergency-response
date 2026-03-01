@@ -158,6 +158,77 @@ class NetworkTopology:
             return None
         return (node.x, node.y)
 
+    def update_node_position(self, node_id: str, x: float, y: float) -> None:
+        """
+        Update a node's position.
+
+        Used by the mobility system to update node positions during simulation.
+        Also updates the graph node attributes.
+
+        Args:
+            node_id: ID of node to update
+            x: New X coordinate (metres)
+            y: New Y coordinate (metres)
+
+        Raises:
+            KeyError: If node_id not found
+            ValueError: If trying to move a non-mobile node
+        """
+        node = self.nodes[node_id]  # Raises KeyError if not found
+
+        if not node.is_mobile:
+            raise ValueError(f"Cannot move non-mobile node: {node_id}")
+
+        node.x = x
+        node.y = y
+
+        self.graph.nodes[node_id]['x'] = x
+        self.graph.nodes[node_id]['y'] = y
+
+    def update_edges_from_positions(self) -> list[tuple[str, str]]:
+        """
+        Recalculate all edges based on current node positions.
+
+        Removes edges for nodes that are now out of range and adds
+        edges for nodes that are now in range.
+
+        Returns:
+            List of (node_a, node_b) tuples for NEW connections
+            (nodes that just came into range)
+        """
+        new_connections = []
+        radio_range = self.parameters.radio_range_m
+        node_ids = list(self.nodes.keys())
+
+        for i, node_a_id in enumerate(node_ids):
+            node_a = self.nodes[node_a_id]
+
+            for node_b_id in node_ids[i + 1:]:
+                node_b = self.nodes[node_b_id]
+
+                distance = node_a.distance_to(node_b)
+                currently_connected = self.graph.has_edge(node_a_id, node_b_id)
+                should_connect = distance <= radio_range
+
+                if should_connect and not currently_connected:
+                    self.graph.add_edge(node_a_id, node_b_id, distance=distance)
+                    new_connections.append((node_a_id, node_b_id))
+                elif not should_connect and currently_connected:
+                    self.graph.remove_edge(node_a_id, node_b_id)
+                elif should_connect and currently_connected:
+                    self.graph[node_a_id][node_b_id]['distance'] = distance
+
+        return new_connections
+
+    def get_connected_pairs(self) -> list[tuple[str, str]]:
+        """
+        Get all currently connected node pairs.
+
+        Returns:
+            List of (node_a, node_b) tuples for all edges
+        """
+        return list(self.graph.edges())
+
 
 class TopologyGenerator:
     """

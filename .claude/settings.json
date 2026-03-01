@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python -m pytest tests/)",
-      "Bash(python -c \":*)"
+      "Bash(python -c \":*)",
+      "Bash(python -m pytest tests/test_simulation.py tests/test_mobility.py::TestMobilityIntegration::test_dynamic_encounter_creation -x --tb=short)",
+      "Bash(python -m pytest tests/test_simulation.py tests/test_mobility.py -x --tb=short)"
     ],
     "additionalDirectories": [
       "/Users/dianafonseca/resilient-emergency-response/outputs/figures"

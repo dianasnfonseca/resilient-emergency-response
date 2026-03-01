@@ -1,5 +1,5 @@
 """
-Simulation Engine (Phase 5).
+Simulation Engine (Phase 5) with Random Waypoint Mobility.
 
 This module implements the discrete event simulation engine that integrates
 all components from Phases 1-4:
@@ -7,15 +7,17 @@ all components from Phases 1-4:
 - PRoPHET communication layer (Phase 2)
 - Scenario generation (Phase 3)
 - Coordination algorithms (Phase 4)
+- Random Waypoint mobility (Phase 1 extension)
 
 The simulation engine provides:
 - Event-driven simulation loop
 - Component integration and coordination
+- Node mobility with dynamic edge updates
 - Results collection for Phase 6 analysis
 - Reproducible experimental execution
 
 Sources:
-    - Ullah & Qayyum (2022): Simulation duration (6000s)
+    - Ullah & Qayyum (2022): Simulation duration (6000s), Random Waypoint mobility
     - Law (2015): Statistical design (30 runs per configuration)
     - Kaji et al. (2025): 30-minute coordination update interval
 """
@@ -43,6 +45,7 @@ from ercs.coordination.algorithms import (
     create_coordinator,
 )
 from ercs.network.topology import NetworkTopology, generate_topology
+from ercs.network.mobility import MobilityManager
 from ercs.scenario.generator import Scenario, ScenarioGenerator, Task
 
 
@@ -59,6 +62,7 @@ class SimulationEventType(str, Enum):
     MESSAGE_EXPIRED = "message_expired"
     NODE_ENCOUNTER = "node_encounter"
     CONNECTIVITY_UPDATE = "connectivity_update"
+    MOBILITY_UPDATE = "mobility_update"
 
 
 @dataclass
@@ -234,11 +238,13 @@ class SimulationEngine:
     The engine implements:
     - Event-driven simulation with priority queue
     - Periodic coordination cycles (30-minute intervals)
-    - Node encounters based on connectivity
-    - Message delivery tracking
+    - Random Waypoint mobility for mobile nodes
+    - Dynamic edge updates based on node positions
+    - Node encounters based on proximity (100m radio range)
+    - Message delivery tracking via PRoPHET protocol
 
     Sources:
-        - Ullah & Qayyum (2022): 6000s simulation duration
+        - Ullah & Qayyum (2022): 6000s simulation duration, Random Waypoint
         - Kaji et al. (2025): 30-minute coordination updates
         - Law (2015): 30 runs per configuration
 
@@ -283,6 +289,7 @@ class SimulationEngine:
         self._manager: CoordinationManager | None = None
         self._adapter: TopologyAdapter | None = None
         self._scenario: Scenario | None = None
+        self._mobility: MobilityManager | None = None
 
         # Results tracking
         self._events: list[SimulationEvent] = []
@@ -392,12 +399,47 @@ class SimulationEngine:
         # Add all tasks to manager
         self._manager.add_tasks(self._scenario.tasks)
 
+        # Phase 1b: Mobility (Random Waypoint)
+        self._initialize_mobility()
+
         # Reset state
         self._current_time = 0.0
         self._event_queue.clear()
         self._events.clear()
         self._task_message_map.clear()
         self._message_creation_times.clear()
+
+    def _initialize_mobility(self) -> None:
+        """
+        Initialize Random Waypoint mobility for mobile nodes.
+        
+        Sources:
+            - Ullah & Qayyum (2022): Random Waypoint model, speed 0-20 m/s
+            - Chapter1_v2: Mobility model selection rationale
+        """
+        self._mobility = MobilityManager(
+            parameters=self.config.network,
+            speed_min=1.0,  # Minimum 1 m/s to ensure movement
+            speed_max=20.0,  # Source: Ullah & Qayyum (2022)
+            pause_min=0.0,
+            pause_max=30.0,  # Brief pauses for realism
+        )
+        
+        # Get initial positions from topology
+        mobile_ids = self._topology.get_mobile_responder_ids()
+        initial_positions = {}
+        
+        for node_id in mobile_ids:
+            pos = self._topology.get_node_position(node_id)
+            if pos is not None:
+                initial_positions[node_id] = pos
+        
+        # Initialize mobility manager
+        self._mobility.initialize(
+            mobile_node_ids=mobile_ids,
+            initial_positions=initial_positions,
+            random_seed=self.random_seed,
+        )
 
     def _initialize_coordination_predictability(self) -> None:
         """
@@ -450,16 +492,35 @@ class SimulationEngine:
                 {"task_id": task.task_id},
             )
 
-        # Schedule periodic node encounters
+        # Schedule mobility updates (every second)
+        self._schedule_mobility_updates()
+
+        # Schedule periodic node encounters (less frequent than mobility)
         self._schedule_encounters()
+
+    def _schedule_mobility_updates(self) -> None:
+        """
+        Schedule periodic mobility updates.
+        
+        Updates every second for smooth movement simulation.
+        """
+        duration = self.config.scenario.simulation_duration_seconds
+        mobility_interval = 1.0  # Update every second
+        
+        t = 0.0
+        while t <= duration:
+            self._schedule_event(
+                SimulationEventType.MOBILITY_UPDATE,
+                t,
+                {"delta_time": mobility_interval},
+            )
+            t += mobility_interval
 
     def _schedule_encounters(self) -> None:
         """Schedule node encounter events based on connectivity."""
         duration = self.config.scenario.simulation_duration_seconds
-        encounter_interval = 60.0  # Check encounters every minute
+        encounter_interval = 10.0  # Check encounters every 10 seconds
 
-        # Start encounters at t=0 to establish initial connectivity
-        # This ensures PRoPHET has predictability values before first coordination
         t = 0.0
         while t <= duration:
             self._schedule_event(
@@ -500,6 +561,9 @@ class SimulationEngine:
 
         elif event.event_type == SimulationEventType.COORDINATION_CYCLE:
             self._handle_coordination_cycle(event, results)
+
+        elif event.event_type == SimulationEventType.MOBILITY_UPDATE:
+            self._handle_mobility_update(event, results)
 
         elif event.event_type == SimulationEventType.NODE_ENCOUNTER:
             self._handle_node_encounters(event, results)
@@ -591,16 +655,67 @@ class SimulationEngine:
                 },
             )
 
+    def _handle_mobility_update(
+        self,
+        event: SimulationEvent,
+        results: SimulationResults,
+    ) -> None:
+        """
+        Handle mobility update event.
+        
+        1. Update node positions via MobilityManager
+        2. Update topology node positions
+        3. Recalculate edges based on new positions
+        4. Process any new encounters for PRoPHET
+        """
+        delta_time = event.data.get("delta_time", 1.0)
+        
+        # Step 1: Update mobility positions
+        moved_nodes = self._mobility.step(
+            current_time=event.timestamp,
+            delta_time=delta_time,
+        )
+        
+        if not moved_nodes:
+            return  # No nodes moved, nothing to update
+        
+        # Step 2: Update topology with new positions
+        all_positions = self._mobility.get_all_positions()
+        
+        for node_id, (x, y) in all_positions.items():
+            self._topology.update_node_position(node_id, x, y)
+        
+        # Step 3: Recalculate edges and find new connections
+        new_connections = self._topology.update_edges_from_positions()
+        
+        # Step 4: Process new encounters for PRoPHET
+        for node_a, node_b in new_connections:
+            # Update PRoPHET predictability
+            delivered = self._communication.process_encounter(
+                node_a=node_a,
+                node_b=node_b,
+                current_time=event.timestamp,
+            )
+            
+            # Check for delivered messages
+            self._process_delivered_messages(delivered, event.timestamp, results)
+
     def _handle_node_encounters(
         self,
         event: SimulationEvent,
         results: SimulationResults,
     ) -> None:
-        """Handle node encounter events based on connectivity."""
-        # Get connected node pairs from topology
+        """
+        Handle node encounter events based on actual connectivity.
+        
+        With mobility enabled, we use the edges from the topology graph
+        which are dynamically updated based on node positions.
+        """
+        # Get connected node pairs from topology (already updated by mobility)
         edges = list(self._topology.graph.edges())
 
         # Process encounters based on connectivity level
+        # This simulates probabilistic link failures on top of physical proximity
         for node_a, node_b in edges:
             # Simulate probabilistic encounters
             if self._rng.random() < self.connectivity_level:
@@ -612,33 +727,43 @@ class SimulationEngine:
                 )
 
                 # Check for delivered messages
-                for msg in delivered:
-                    if msg.status == MessageStatus.DELIVERED:
-                        results.messages_delivered += 1
-
-                        # Calculate delivery time
-                        creation_time = self._message_creation_times.get(
-                            msg.message_id, event.timestamp
-                        )
-                        delivery_time = event.timestamp - creation_time
-
-                        # Find associated task
-                        task_id = msg.payload.get("task_id") if msg.payload else None
-                        if task_id:
-                            results.delivery_times.append((task_id, delivery_time))
-
-                        self._log_event(
-                            SimulationEventType.MESSAGE_DELIVERED,
-                            event.timestamp,
-                            {
-                                "message_id": msg.message_id,
-                                "delivery_time": delivery_time,
-                            },
-                        )
+                self._process_delivered_messages(delivered, event.timestamp, results)
 
         # Expire old messages
         expired = self._communication.expire_all_messages(event.timestamp)
         results.messages_expired += expired
+
+    def _process_delivered_messages(
+        self,
+        delivered: list,
+        timestamp: float,
+        results: SimulationResults,
+    ) -> None:
+        """Process list of TransmissionResult and update results."""
+        for result in delivered:
+            if result.success:
+                msg = result.message
+                results.messages_delivered += 1
+
+                # Calculate delivery time
+                creation_time = self._message_creation_times.get(
+                    msg.message_id, timestamp
+                )
+                delivery_time = timestamp - creation_time
+
+                # Find associated task
+                task_id = msg.payload.get("task_id") if msg.payload else None
+                if task_id:
+                    results.delivery_times.append((task_id, delivery_time))
+
+                self._log_event(
+                    SimulationEventType.MESSAGE_DELIVERED,
+                    timestamp,
+                    {
+                        "message_id": msg.message_id,
+                        "delivery_time": delivery_time,
+                    },
+                )
 
     def _get_task(self, task_id: str) -> Task | None:
         """Get task by ID from scenario."""

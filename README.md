@@ -58,6 +58,11 @@ For exact dependency versions used in development:
 pip install -r requirements.txt
 ```
 
+To install with visualization dependencies (Streamlit dashboard + Jupyter notebook):
+```bash
+pip install -e ".[viz]"
+```
+
 ## Usage
 
 ```bash
@@ -72,6 +77,34 @@ from ercs.simulation import run_simulation
 results = run_simulation("adaptive", connectivity_level=0.75, random_seed=42)
 print(f"Delivery rate: {results.delivery_rate:.2%}")
 ```
+
+### Streamlit Dashboard
+
+Interactive web dashboard for running experiments and exploring results visually.
+
+```bash
+streamlit run app/dashboard.py
+```
+
+Features:
+
+- Sidebar with all experiment parameters
+- Quick test mode (5 runs/config) for fast iteration
+- Live progress bar during experiment execution
+- Interactive visualizations: grouped bar charts, box plots, heatmaps, degradation lines
+- Statistical analysis tables (t-tests, ANOVA) with significance highlighting
+- Auto-generated key findings summary
+
+### Jupyter Notebook
+
+Static notebook suitable for thesis appendix, with publication-quality figures.
+
+```bash
+cd notebooks
+jupyter notebook experiment_report.ipynb
+```
+
+Run all cells top-to-bottom. To do a quick test, change `RUNS = runs_per_config` to `RUNS = 5` in the execution cell. All figures are saved to `outputs/figures/`.
 
 ## Parameters
 
