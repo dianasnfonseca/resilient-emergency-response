@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/)",
+      "Bash(python -c \":*)"
+    ],
+    "additionalDirectories": [
+      "/Users/dianafonseca/resilient-emergency-response/outputs/figures"
+    ]
+  }
+}
