@@ -22,6 +22,16 @@ from ercs.config.parameters import (
     PRoPHETParameters,
     BufferDropPolicy,
 )
+from conftest import (
+    AGING_INTERVAL_S,
+    BETA,
+    BUFFER_SIZE_BYTES,
+    GAMMA,
+    MESSAGE_SIZE_BYTES,
+    MESSAGE_TTL_S,
+    P_INIT,
+    TRANSMIT_SPEED_BPS,
+)
 from ercs.communication import (
     CommunicationLayer,
     DeliveryPredictabilityMatrix,
@@ -50,8 +60,8 @@ class TestMessage:
             message_type=MessageType.COORDINATION,
             payload=b"test payload",
             creation_time=100.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         assert msg.message_id == "msg_001"
@@ -59,8 +69,8 @@ class TestMessage:
         assert msg.destination_id == "node_b"
         assert msg.message_type == MessageType.COORDINATION
         assert msg.creation_time == 100.0
-        assert msg.ttl_seconds == 18000
-        assert msg.size_bytes == 512000
+        assert msg.ttl_seconds == MESSAGE_TTL_S
+        assert msg.size_bytes == MESSAGE_SIZE_BYTES
         assert msg.hop_count == 0
         assert msg.status == MessageStatus.PENDING
 
@@ -73,8 +83,8 @@ class TestMessage:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         # At creation time
@@ -92,8 +102,8 @@ class TestMessage:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,  # 300 minutes
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,  # 300 minutes
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         # At TTL
@@ -111,11 +121,11 @@ class TestMessage:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
-        assert msg.remaining_ttl(0.0) == 18000.0
+        assert msg.remaining_ttl(0.0) == MESSAGE_TTL_S
         assert msg.remaining_ttl(9000.0) == 9000.0
         assert msg.remaining_ttl(18000.0) == 0.0
         assert msg.remaining_ttl(20000.0) == 0.0  # Can't be negative
@@ -129,8 +139,8 @@ class TestMessage:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=100.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         assert msg.age(100.0) == 0.0
@@ -146,8 +156,8 @@ class TestMessage:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         assert msg.hop_count == 0
@@ -165,8 +175,8 @@ class TestMessage:
             message_type=MessageType.COORDINATION,
             payload="test",
             creation_time=100.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
             urgency_level="H",
         )
 
@@ -191,8 +201,8 @@ class TestMessage:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         msg2 = Message(
@@ -222,8 +232,8 @@ class TestCreateMessage:
                 message_type=MessageType.STATUS,
                 payload="test",
                 creation_time=0.0,
-                ttl_seconds=18000,
-                size_bytes=512000,
+                ttl_seconds=MESSAGE_TTL_S,
+                size_bytes=MESSAGE_SIZE_BYTES,
             )
             for _ in range(100)
         ]
@@ -245,7 +255,7 @@ class TestMessageBuffer:
         """Create a buffer with 5 MB capacity."""
         return MessageBuffer(
             node_id="test_node",
-            capacity_bytes=5_242_880,
+            capacity_bytes=BUFFER_SIZE_BYTES,
             drop_policy=BufferDropPolicy.DROP_OLDEST,
         )
 
@@ -261,9 +271,9 @@ class TestMessageBuffer:
     def test_buffer_creation(self, buffer: MessageBuffer):
         """Test buffer initialisation."""
         assert buffer.node_id == "test_node"
-        assert buffer.capacity_bytes == 5_242_880
+        assert buffer.capacity_bytes == BUFFER_SIZE_BYTES
         assert buffer.used_bytes == 0
-        assert buffer.available_bytes == 5_242_880
+        assert buffer.available_bytes == BUFFER_SIZE_BYTES
         assert buffer.message_count == 0
 
     def test_store_message(self, buffer: MessageBuffer):
@@ -274,15 +284,15 @@ class TestMessageBuffer:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         result = buffer.store(msg, current_time=0.0)
 
         assert result is True
         assert buffer.message_count == 1
-        assert buffer.used_bytes == 512000
+        assert buffer.used_bytes == MESSAGE_SIZE_BYTES
         assert buffer.has_message(msg.message_id)
 
     def test_store_duplicate_ignored(self, buffer: MessageBuffer):
@@ -293,8 +303,8 @@ class TestMessageBuffer:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         buffer.store(msg, current_time=0.0)
@@ -311,7 +321,7 @@ class TestMessageBuffer:
             payload="test",
             creation_time=0.0,
             ttl_seconds=100,  # Short TTL
-            size_bytes=512000,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         result = buffer.store(msg, current_time=200.0)  # After expiration
@@ -330,8 +340,8 @@ class TestMessageBuffer:
                 message_type=MessageType.STATUS,
                 payload=f"test_{i}",
                 creation_time=float(i * 10),  # 0, 10, 20, 30, 40
-                ttl_seconds=18000,
-                size_bytes=512000,
+                ttl_seconds=MESSAGE_TTL_S,
+                size_bytes=MESSAGE_SIZE_BYTES,
             )
             messages.append(msg)
             small_buffer.store(msg, current_time=50.0)
@@ -351,8 +361,8 @@ class TestMessageBuffer:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         buffer.store(msg, current_time=0.0)
@@ -376,8 +386,8 @@ class TestMessageBuffer:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
-            size_bytes=512000,
+            ttl_seconds=MESSAGE_TTL_S,
+            size_bytes=MESSAGE_SIZE_BYTES,
         )
 
         buffer.store(msg, current_time=0.0)
@@ -395,7 +405,7 @@ class TestMessageBuffer:
                 message_type=MessageType.STATUS,
                 payload="test",
                 creation_time=0.0,
-                ttl_seconds=18000,
+                ttl_seconds=MESSAGE_TTL_S,
                 size_bytes=100000,
             )
             buffer.store(msg, current_time=0.0)
@@ -449,7 +459,7 @@ class TestMessageBuffer:
             message_type=MessageType.STATUS,
             payload="test",
             creation_time=0.0,
-            ttl_seconds=18000,
+            ttl_seconds=MESSAGE_TTL_S,
             size_bytes=buffer.capacity_bytes // 2,
         )
         buffer.store(msg, current_time=0.0)
@@ -465,7 +475,7 @@ class TestMessageBuffer:
                 message_type=MessageType.STATUS,
                 payload=f"test_{i}",
                 creation_time=0.0,
-                ttl_seconds=18000,
+                ttl_seconds=MESSAGE_TTL_S,
                 size_bytes=100000,
             )
             buffer.store(msg, current_time=0.0)
@@ -486,9 +496,9 @@ class TestDeliveryPredictabilityMatrix:
     def matrix(self) -> DeliveryPredictabilityMatrix:
         """Create matrix with standard PRoPHET parameters."""
         return DeliveryPredictabilityMatrix(
-            p_init=0.75,
-            beta=0.25,
-            gamma=0.98,
+            p_init=P_INIT,
+            beta=BETA,
+            gamma=GAMMA,
             update_interval=0.1,
         )
 
@@ -496,9 +506,9 @@ class TestDeliveryPredictabilityMatrix:
         self, matrix: DeliveryPredictabilityMatrix
     ):
         """Test matrix creation with standard parameters (Kumar et al., 2023)."""
-        assert matrix.p_init == 0.75
-        assert matrix.beta == 0.25
-        assert matrix.gamma == 0.98
+        assert matrix.p_init == P_INIT
+        assert matrix.beta == BETA
+        assert matrix.gamma == GAMMA
         assert matrix.update_interval == 0.1
 
     def test_initial_predictability_is_zero(self, matrix: DeliveryPredictabilityMatrix):
@@ -515,8 +525,8 @@ class TestDeliveryPredictabilityMatrix:
         matrix.update_encounter("node_a", "node_b")
 
         # First encounter should set predictability to P_init
-        assert matrix.get_predictability("node_a", "node_b") == 0.75
-        assert matrix.get_predictability("node_b", "node_a") == 0.75
+        assert matrix.get_predictability("node_a", "node_b") == P_INIT
+        assert matrix.get_predictability("node_b", "node_a") == P_INIT
 
     def test_repeated_encounters_increase_predictability(
         self, matrix: DeliveryPredictabilityMatrix
@@ -563,7 +573,7 @@ class TestDeliveryPredictabilityMatrix:
         p_ac = matrix.get_predictability("node_a", "node_c")
 
         # P(A,C) = 0 + (1-0) × 0.75 × 0.75 × 0.25 = 0.140625
-        expected = 0.75 * 0.75 * 0.25
+        expected = P_INIT * P_INIT * BETA
         assert p_ac == pytest.approx(expected, rel=0.001)
 
     def test_aging_reduces_predictability(self, matrix: DeliveryPredictabilityMatrix):
@@ -573,13 +583,13 @@ class TestDeliveryPredictabilityMatrix:
         With γ=0.98 and k=10: P = 0.75 × 0.98^10 ≈ 0.611
         """
         matrix.initialise_node("node_a", current_time=0.0)
-        matrix.set_predictability("node_a", "node_b", 0.75)
+        matrix.set_predictability("node_a", "node_b", P_INIT)
 
         # Age by 1 second (10 intervals of 0.1)
         matrix.age_predictabilities("node_a", current_time=1.0)
 
         p = matrix.get_predictability("node_a", "node_b")
-        expected = 0.75 * (0.98**10)
+        expected = P_INIT * (GAMMA**10)
         assert p == pytest.approx(expected, rel=0.001)
 
     def test_aging_removes_small_predictabilities(
@@ -778,7 +788,7 @@ class TestCommunicationLayer:
 
         # Should now have predictability
         p_after = comm_layer.get_delivery_predictability("mobile_0", "mobile_1")
-        assert p_after == 0.75  # P_init
+        assert p_after == P_INIT
 
     def test_direct_delivery(self, comm_layer: CommunicationLayer):
         """Test direct message delivery when destination is encountered."""
@@ -905,7 +915,7 @@ class TestCommunicationLayer:
         At 2 Mbps: 4,000,000 / 2,000,000 = 2 seconds
         """
         size_bytes = 500_000
-        expected_time = (size_bytes * 8) / 2_000_000  # 2 seconds
+        expected_time = (size_bytes * 8) / TRANSMIT_SPEED_BPS  # 2 seconds
 
         time = comm_layer._calculate_transmission_time(size_bytes)
         assert time == expected_time
@@ -922,32 +932,32 @@ class TestPhase2Parameters:
     def test_prophet_p_init(self):
         """Verify P_init = 0.75 (Kumar et al., 2023)."""
         params = PRoPHETParameters()
-        assert params.p_init == 0.75
+        assert params.p_init == P_INIT
 
     def test_prophet_beta(self):
         """Verify β = 0.25 (Kumar et al., 2023)."""
         params = PRoPHETParameters()
-        assert params.beta == 0.25
+        assert params.beta == BETA
 
     def test_prophet_gamma(self):
         """Verify γ = 0.98 (Kumar et al., 2023)."""
         params = PRoPHETParameters()
-        assert params.gamma == 0.98
+        assert params.gamma == GAMMA
 
     def test_message_ttl(self):
         """Verify message TTL = 300 minutes (Ullah & Qayyum, 2022)."""
         params = CommunicationParameters()
-        assert params.message_ttl_seconds == 18000  # 300 * 60
+        assert params.message_ttl_seconds == MESSAGE_TTL_S
 
     def test_transmit_speed(self):
         """Verify transmit speed = 2 Mbps (Ullah & Qayyum, 2022)."""
         params = CommunicationParameters()
-        assert params.transmit_speed_bps == 2_000_000
+        assert params.transmit_speed_bps == TRANSMIT_SPEED_BPS
 
     def test_update_interval(self):
         """Verify update interval = 30.0s (aging time unit, Kumar et al., 2023)."""
         params = CommunicationParameters()
-        assert params.update_interval_seconds == 30.0
+        assert params.update_interval_seconds == AGING_INTERVAL_S
 
     def test_buffer_drop_policy(self):
         """Verify buffer drop policy = drop_oldest (Ullah & Qayyum, 2022)."""
@@ -1047,7 +1057,7 @@ class TestCommunicationIntegration:
         # First encounter at time 0
         layer.process_encounter("mobile_0", "mobile_1", current_time=0.0)
         p1 = layer.get_delivery_predictability("mobile_0", "mobile_1")
-        assert p1 == 0.75
+        assert p1 == P_INIT
 
         # Second encounter at same time (should increase, no aging)
         layer.process_encounter("mobile_0", "mobile_1", current_time=0.0)

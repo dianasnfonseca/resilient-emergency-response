@@ -34,6 +34,12 @@ from ercs.coordination import (
     EventType,
     create_coordinator,
 )
+from conftest import (
+    COORDINATION_INTERVAL_S,
+    P_INIT,
+    PATH_THRESHOLD,
+    PRIORITY_LEVELS,
+)
 
 # =============================================================================
 # Mock Implementations for Testing
@@ -106,7 +112,7 @@ def full_connectivity_network() -> MockNetworkState:
     """Create network state with full connectivity (all P > 0)."""
     network = MockNetworkState()
     for i in range(5):
-        network.set_predictability("coord_0", f"mobile_{i}", 0.75)
+        network.set_predictability("coord_0", f"mobile_{i}", P_INIT)
     return network
 
 
@@ -115,7 +121,7 @@ def partial_connectivity_network() -> MockNetworkState:
     """Create network state with partial connectivity."""
     network = MockNetworkState()
     # Only some responders reachable
-    network.set_predictability("coord_0", "mobile_0", 0.75)
+    network.set_predictability("coord_0", "mobile_0", P_INIT)
     network.set_predictability("coord_0", "mobile_1", 0.50)
     network.set_predictability("coord_0", "mobile_2", 0.0)  # Not reachable
     network.set_predictability("coord_0", "mobile_3", 0.0)  # Not reachable
@@ -360,7 +366,7 @@ class TestAdaptiveCoordinator:
             current_time=100.0,
         )
 
-        assert assignments[0].predictability == 0.75
+        assert assignments[0].predictability == P_INIT
 
     def test_no_assignment_when_all_unreachable(
         self,
@@ -703,7 +709,7 @@ class TestCoordinationManager:
         # At t=0 with last_update=0, should wait for interval
         assert manager.should_update(0.0) is False
         assert manager.should_update(1000.0) is False
-        assert manager.should_update(1800.0) is True
+        assert manager.should_update(float(COORDINATION_INTERVAL_S)) is True
         assert manager.should_update(2000.0) is True
 
     def test_run_coordination_cycle(
@@ -873,17 +879,17 @@ class TestPhase4Parameters:
     def test_update_interval(self):
         """Verify update interval = 30 minutes (Kaji et al., 2025)."""
         params = CoordinationParameters()
-        assert params.update_interval_seconds == 1800  # 30 * 60
+        assert params.update_interval_seconds == COORDINATION_INTERVAL_S  # 30 * 60
 
     def test_priority_levels(self):
         """Verify 3 priority levels (Rosas et al., 2023)."""
         params = CoordinationParameters()
-        assert params.priority_levels == 3
+        assert params.priority_levels == PRIORITY_LEVELS
 
     def test_path_threshold(self):
         """Verify path threshold = 0 (Ullah & Qayyum, 2022)."""
         params = CoordinationParameters()
-        assert params.available_path_threshold == 0.0
+        assert params.available_path_threshold == PATH_THRESHOLD
 
     def test_proximity_method(self):
         """Verify Euclidean distance (Keykhaei et al., 2024)."""
@@ -944,7 +950,7 @@ class TestCoordinationIntegration:
             responder_locator=sample_responders,
             network_state=full_connectivity_network,
             coordination_node="coord_0",
-            current_time=1800.0,
+            current_time=float(COORDINATION_INTERVAL_S),
         )
         all_assignments.extend(assignments)
 
@@ -953,7 +959,7 @@ class TestCoordinationIntegration:
             responder_locator=sample_responders,
             network_state=full_connectivity_network,
             coordination_node="coord_0",
-            current_time=3600.0,
+            current_time=float(2 * COORDINATION_INTERVAL_S),
         )
         all_assignments.extend(assignments)
 
@@ -962,7 +968,7 @@ class TestCoordinationIntegration:
             responder_locator=sample_responders,
             network_state=full_connectivity_network,
             coordination_node="coord_0",
-            current_time=5400.0,
+            current_time=float(3 * COORDINATION_INTERVAL_S),
         )
         all_assignments.extend(assignments)
 

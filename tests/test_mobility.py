@@ -13,6 +13,7 @@ import pytest
 import numpy as np
 
 from ercs.config.parameters import NetworkParameters
+from conftest import RADIO_RANGE_M, SIMULATION_DURATION_S, SPEED_MAX_MPS
 from ercs.network.mobility import (
     MobilityManager,
     MobileNodeState,
@@ -116,11 +117,11 @@ class TestMobilityManager:
         manager = MobilityManager(
             parameters=params,
             speed_min=0.0,
-            speed_max=20.0,
+            speed_max=SPEED_MAX_MPS,
         )
-        
+
         assert manager.speed_min == 0.0
-        assert manager.speed_max == 20.0
+        assert manager.speed_max == SPEED_MAX_MPS
     
     def test_initialize(self, manager: MobilityManager):
         """Test initialization with mobile nodes."""
@@ -160,7 +161,7 @@ class TestMobilityManager:
         # Access internal state to check waypoint speeds
         for state in initialized_manager._node_states.values():
             if state.waypoint is not None:
-                assert 1.0 <= state.waypoint.speed <= 20.0
+                assert 1.0 <= state.waypoint.speed <= SPEED_MAX_MPS
     
     def test_reproducibility_with_seed(self, params: NetworkParameters):
         """Test that same seed produces same movements."""
@@ -208,7 +209,7 @@ class TestCalculateEncounters:
             "node_b": (1000.0, 1000.0),  # Far apart
         }
         
-        encounters = calculate_encounters(positions, radio_range=100.0)
+        encounters = calculate_encounters(positions, radio_range=RADIO_RANGE_M)
         
         assert len(encounters) == 0
     
@@ -219,7 +220,7 @@ class TestCalculateEncounters:
             "node_b": (50.0, 0.0),  # 50m apart, within 100m range
         }
         
-        encounters = calculate_encounters(positions, radio_range=100.0)
+        encounters = calculate_encounters(positions, radio_range=RADIO_RANGE_M)
         
         assert len(encounters) == 1
         assert encounters[0][0] == "node_a"
@@ -233,7 +234,7 @@ class TestCalculateEncounters:
             "node_b": (100.0, 0.0),  # Exactly 100m
         }
         
-        encounters = calculate_encounters(positions, radio_range=100.0)
+        encounters = calculate_encounters(positions, radio_range=RADIO_RANGE_M)
         
         assert len(encounters) == 1
     
@@ -245,7 +246,7 @@ class TestCalculateEncounters:
             "node_c": (80.0, 0.0),   # In range of A and B
         }
         
-        encounters = calculate_encounters(positions, radio_range=100.0)
+        encounters = calculate_encounters(positions, radio_range=RADIO_RANGE_M)
         
         # Should have A-B, A-C, B-C
         assert len(encounters) == 3
@@ -260,9 +261,9 @@ class TestMobilityIntegration:
         manager = MobilityManager(
             parameters=params,
             speed_min=5.0,  # Use higher minimum speed for faster test
-            speed_max=20.0,
+            speed_max=SPEED_MAX_MPS,
         )
-        
+
         # Start node far from coordination zone
         mobile_ids = ["mobile_0"]
         positions = {"mobile_0": (100.0, 500.0)}  # In incident zone
@@ -276,19 +277,19 @@ class TestMobilityIntegration:
         # Run for simulated time
         min_distance_seen = float('inf')
         
-        for i in range(6000):  # 6000 seconds
+        for i in range(SIMULATION_DURATION_S):  # 6000 seconds
             manager.step(float(i), 1.0)
             pos = manager.get_position("mobile_0")
-            
+
             # Check distance to coordination zone center
             dx = pos[0] - coord_center_x
             dy = pos[1] - coord_center_y
             distance = np.sqrt(dx*dx + dy*dy)
-            
+
             min_distance_seen = min(min_distance_seen, distance)
-            
+
             # If within range of coordination zone, success
-            if distance < 100.0:  # Radio range
+            if distance < RADIO_RANGE_M:
                 break
         
         # Node should have gotten reasonably close to coordination zone
@@ -313,11 +314,11 @@ class TestMobilityIntegration:
         # Track if we ever see an encounter
         encountered = False
 
-        for i in range(6000):
+        for i in range(SIMULATION_DURATION_S):
             manager.step(float(i), 1.0)
 
             current_positions = manager.get_all_positions()
-            encounters = calculate_encounters(current_positions, radio_range=100.0)
+            encounters = calculate_encounters(current_positions, radio_range=RADIO_RANGE_M)
 
             if encounters:
                 encountered = True

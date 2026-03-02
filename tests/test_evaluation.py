@@ -31,6 +31,12 @@ from ercs.evaluation import (
 )
 from ercs.simulation.engine import SimulationResults
 
+from conftest import (
+    CONNECTIVITY_MILD,
+    CONNECTIVITY_MODERATE,
+    CONNECTIVITY_SEVERE,
+)
+
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -49,7 +55,7 @@ def sample_results() -> list[SimulationResults]:
     np.random.seed(42)
 
     for algorithm in [AlgorithmType.ADAPTIVE, AlgorithmType.BASELINE]:
-        for connectivity in [0.75, 0.40, 0.20]:
+        for connectivity in [CONNECTIVITY_MILD, CONNECTIVITY_MODERATE, CONNECTIVITY_SEVERE]:
             for run in range(10):
                 result = SimulationResults(
                     config=config,
@@ -378,10 +384,10 @@ class TestPerformanceEvaluator:
 
         comparison = evaluator.compare_algorithms(
             MetricType.DELIVERY_RATE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
         )
 
-        assert comparison.connectivity_level == 0.75
+        assert comparison.connectivity_level == CONNECTIVITY_MILD
         assert comparison.adaptive_stats.n == 10
         assert comparison.baseline_stats.n == 10
 
@@ -568,7 +574,7 @@ class TestComparisonResult:
 
         result = ComparisonResult(
             metric=MetricType.DELIVERY_RATE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             adaptive_stats=stats1,
             baseline_stats=stats2,
             ttest=ttest,
@@ -578,6 +584,6 @@ class TestComparisonResult:
         d = result.to_dict()
 
         assert d["metric"] == "delivery_rate"
-        assert d["connectivity_level"] == 0.75
+        assert d["connectivity_level"] == CONNECTIVITY_MILD
         assert d["improvement_pct"] == 33.33
         assert d["significant"] is True

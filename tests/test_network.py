@@ -17,6 +17,19 @@ Sources verified:
 import numpy as np
 import pytest
 
+from conftest import (
+    BUFFER_SIZE_BYTES,
+    COORDINATION_NODE_COUNT,
+    COORDINATION_ZONE_HEIGHT_M,
+    COORDINATION_ZONE_WIDTH_M,
+    INCIDENT_ZONE_HEIGHT_M,
+    INCIDENT_ZONE_WIDTH_M,
+    MOBILE_RESPONDER_COUNT,
+    NODE_COUNT,
+    RADIO_RANGE_M,
+    SIMULATION_AREA_HEIGHT_M,
+    SIMULATION_AREA_WIDTH_M,
+)
 from ercs.config.parameters import NetworkParameters, ZoneConfig
 from ercs.network.topology import (
     generate_topology,
@@ -38,7 +51,7 @@ class TestNodeClass:
             x=100.0,
             y=200.0,
             is_mobile=False,
-            buffer_size_bytes=5_242_880,
+            buffer_size_bytes=BUFFER_SIZE_BYTES,
         )
         
         assert node.node_id == "test_1"
@@ -46,12 +59,12 @@ class TestNodeClass:
         assert node.x == 100.0
         assert node.y == 200.0
         assert node.is_mobile is False
-        assert node.buffer_size_bytes == 5_242_880
+        assert node.buffer_size_bytes == BUFFER_SIZE_BYTES
     
     def test_distance_calculation(self):
         """Test Euclidean distance calculation between nodes."""
-        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, 5_242_880)
-        node_b = Node("b", NodeType.MOBILE_RESPONDER, 3.0, 4.0, True, 5_242_880)
+        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, BUFFER_SIZE_BYTES)
+        node_b = Node("b", NodeType.MOBILE_RESPONDER, 3.0, 4.0, True, BUFFER_SIZE_BYTES)
         
         # 3-4-5 triangle
         assert node_a.distance_to(node_b) == 5.0
@@ -59,38 +72,38 @@ class TestNodeClass:
     
     def test_distance_same_location(self):
         """Test distance to node at same location is zero."""
-        node_a = Node("a", NodeType.MOBILE_RESPONDER, 100.0, 100.0, True, 5_242_880)
-        node_b = Node("b", NodeType.MOBILE_RESPONDER, 100.0, 100.0, True, 5_242_880)
+        node_a = Node("a", NodeType.MOBILE_RESPONDER, 100.0, 100.0, True, BUFFER_SIZE_BYTES)
+        node_b = Node("b", NodeType.MOBILE_RESPONDER, 100.0, 100.0, True, BUFFER_SIZE_BYTES)
         
         assert node_a.distance_to(node_b) == 0.0
     
     def test_within_range_true(self):
         """Test nodes within communication range."""
-        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, 5_242_880)
-        node_b = Node("b", NodeType.MOBILE_RESPONDER, 50.0, 0.0, True, 5_242_880)
+        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, BUFFER_SIZE_BYTES)
+        node_b = Node("b", NodeType.MOBILE_RESPONDER, 50.0, 0.0, True, BUFFER_SIZE_BYTES)
         
         # 50m apart, 100m range
         assert node_a.is_within_range(node_b, 100.0) == True
     
     def test_within_range_false(self):
         """Test nodes outside communication range."""
-        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, 5_242_880)
-        node_b = Node("b", NodeType.MOBILE_RESPONDER, 150.0, 0.0, True, 5_242_880)
+        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, BUFFER_SIZE_BYTES)
+        node_b = Node("b", NodeType.MOBILE_RESPONDER, 150.0, 0.0, True, BUFFER_SIZE_BYTES)
         
         # 150m apart, 100m range
         assert node_a.is_within_range(node_b, 100.0) == False
     
     def test_within_range_exact_boundary(self):
         """Test nodes exactly at communication range boundary."""
-        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, 5_242_880)
-        node_b = Node("b", NodeType.MOBILE_RESPONDER, 100.0, 0.0, True, 5_242_880)
+        node_a = Node("a", NodeType.MOBILE_RESPONDER, 0.0, 0.0, True, BUFFER_SIZE_BYTES)
+        node_b = Node("b", NodeType.MOBILE_RESPONDER, 100.0, 0.0, True, BUFFER_SIZE_BYTES)
         
         # Exactly 100m apart, 100m range (should be within)
         assert node_a.is_within_range(node_b, 100.0) == True
     
     def test_to_dict(self):
         """Test conversion to dictionary for NetworkX attributes."""
-        node = Node("test", NodeType.COORDINATION, 50.0, 75.0, False, 5_242_880)
+        node = Node("test", NodeType.COORDINATION, 50.0, 75.0, False, BUFFER_SIZE_BYTES)
         
         d = node.to_dict()
         
@@ -98,7 +111,7 @@ class TestNodeClass:
         assert d["x"] == 50.0
         assert d["y"] == 75.0
         assert d["is_mobile"] is False
-        assert d["buffer_size_bytes"] == 5_242_880
+        assert d["buffer_size_bytes"] == BUFFER_SIZE_BYTES
 
 
 class TestTopologyGenerator:
@@ -118,13 +131,13 @@ class TestTopologyGenerator:
         """Verify total node count matches specification (50 nodes)."""
         topology = generator.generate()
         
-        assert topology.total_nodes == 50
-    
+        assert topology.total_nodes == NODE_COUNT
+
     def test_generates_correct_coordination_nodes(self, generator: TopologyGenerator):
         """Verify coordination node count (2 fixed nodes)."""
         topology = generator.generate()
-        
-        assert len(topology.coordination_nodes) == 2
+
+        assert len(topology.coordination_nodes) == COORDINATION_NODE_COUNT
         
         for node_id in topology.coordination_nodes:
             node = topology.get_node(node_id)
@@ -135,13 +148,13 @@ class TestTopologyGenerator:
         """Verify mobile responder count (48 mobile nodes)."""
         topology = generator.generate()
         
-        assert len(topology.mobile_nodes) == 48
-        
+        assert len(topology.mobile_nodes) == MOBILE_RESPONDER_COUNT
+
         for node_id in topology.mobile_nodes:
             node = topology.get_node(node_id)
             assert node.node_type == NodeType.MOBILE_RESPONDER
             assert node.is_mobile is True
-    
+
     def test_coordination_nodes_in_coordination_zone(self, generator: TopologyGenerator):
         """Verify coordination nodes are placed within coordination zone."""
         topology = generator.generate()
@@ -204,7 +217,7 @@ class TestTopologyGenerator:
     def test_buffer_size_assigned(self, generator: TopologyGenerator):
         """Verify all nodes have correct buffer size (5 MB)."""
         topology = generator.generate()
-        expected_buffer = 5_242_880  # 5 MB in bytes
+        expected_buffer = BUFFER_SIZE_BYTES
         
         for node in topology.nodes.values():
             assert node.buffer_size_bytes == expected_buffer
@@ -305,15 +318,15 @@ class TestNetworkTopology:
         """Test filtering nodes by coordination type."""
         coord_nodes = list(topology.nodes_by_type(NodeType.COORDINATION))
         
-        assert len(coord_nodes) == 2
+        assert len(coord_nodes) == COORDINATION_NODE_COUNT
         for node in coord_nodes:
             assert node.node_type == NodeType.COORDINATION
-    
+
     def test_nodes_by_type_mobile(self, topology: NetworkTopology):
         """Test filtering nodes by mobile type."""
         mobile_nodes = list(topology.nodes_by_type(NodeType.MOBILE_RESPONDER))
-        
-        assert len(mobile_nodes) == 48
+
+        assert len(mobile_nodes) == MOBILE_RESPONDER_COUNT
         for node in mobile_nodes:
             assert node.node_type == NodeType.MOBILE_RESPONDER
 
@@ -325,15 +338,15 @@ class TestGenerateTopologyFunction:
         """Test generation with all defaults."""
         topology = generate_topology()
         
-        assert topology.total_nodes == 50
-        assert len(topology.coordination_nodes) == 2
-        assert len(topology.mobile_nodes) == 48
-    
+        assert topology.total_nodes == NODE_COUNT
+        assert len(topology.coordination_nodes) == COORDINATION_NODE_COUNT
+        assert len(topology.mobile_nodes) == MOBILE_RESPONDER_COUNT
+
     def test_with_connectivity_level(self):
         """Test generation with specific connectivity."""
         topology = generate_topology(connectivity_level=0.5, random_seed=42)
-        
-        assert topology.total_nodes == 50
+
+        assert topology.total_nodes == NODE_COUNT
     
     def test_with_custom_parameters(self):
         """Test generation with custom parameters."""
@@ -366,22 +379,22 @@ class TestZoneBoundaryConditions:
         """Verify incident zone matches spec: 700 × 600 m²."""
         params = NetworkParameters()
         
-        assert params.incident_zone.width_m == 700.0
-        assert params.incident_zone.height_m == 600.0
+        assert params.incident_zone.width_m == INCIDENT_ZONE_WIDTH_M
+        assert params.incident_zone.height_m == INCIDENT_ZONE_HEIGHT_M
     
     def test_coordination_zone_dimensions(self):
         """Verify coordination zone matches spec: 50 × 50 m²."""
         params = NetworkParameters()
         
-        assert params.coordination_zone.width_m == 50.0
-        assert params.coordination_zone.height_m == 50.0
+        assert params.coordination_zone.width_m == COORDINATION_ZONE_WIDTH_M
+        assert params.coordination_zone.height_m == COORDINATION_ZONE_HEIGHT_M
     
     def test_simulation_area_dimensions(self):
         """Verify simulation area matches spec: 3000 × 1500 m²."""
         params = NetworkParameters()
         
-        assert params.simulation_area.width_m == 3000.0
-        assert params.simulation_area.height_m == 1500.0
+        assert params.simulation_area.width_m == SIMULATION_AREA_WIDTH_M
+        assert params.simulation_area.height_m == SIMULATION_AREA_HEIGHT_M
     
     def test_coordination_zone_at_eastern_edge(self):
         """Verify coordination zone is positioned at eastern edge."""

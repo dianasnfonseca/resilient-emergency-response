@@ -33,6 +33,19 @@ from ercs.simulation import (
     run_simulation,
 )
 
+from conftest import (
+    CONNECTIVITY_MILD,
+    CONNECTIVITY_MODERATE,
+    CONNECTIVITY_SCENARIOS,
+    CONNECTIVITY_SEVERE,
+    COORDINATION_INTERVAL_S,
+    MESSAGE_RATE_PER_MIN,
+    MOBILE_RESPONDER_COUNT,
+    RUNS_PER_CONFIG,
+    SIMULATION_DURATION_S,
+    TOTAL_EXPERIMENTAL_RUNS,
+)
+
 # =============================================================================
 # Test SimulationEvent
 # =============================================================================
@@ -184,13 +197,13 @@ class TestSimulationEngine:
         engine = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
         assert engine.config == short_config
         assert engine.algorithm_type == AlgorithmType.ADAPTIVE
-        assert engine.connectivity_level == 0.75
+        assert engine.connectivity_level == CONNECTIVITY_MILD
         assert engine.random_seed == 42
 
     def test_run_simulation_adaptive(self, short_config: SimulationConfig):
@@ -198,14 +211,14 @@ class TestSimulationEngine:
         engine = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
         results = engine.run(run_number=0)
 
         assert results.algorithm == AlgorithmType.ADAPTIVE
-        assert results.connectivity_level == 0.75
+        assert results.connectivity_level == CONNECTIVITY_MILD
         assert results.run_number == 0
         assert results.total_tasks > 0
         assert len(results.events) > 0
@@ -215,14 +228,14 @@ class TestSimulationEngine:
         engine = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.BASELINE,
-            connectivity_level=0.40,
+            connectivity_level=CONNECTIVITY_MODERATE,
             random_seed=42,
         )
 
         results = engine.run(run_number=1)
 
         assert results.algorithm == AlgorithmType.BASELINE
-        assert results.connectivity_level == 0.40
+        assert results.connectivity_level == CONNECTIVITY_MODERATE
         assert results.run_number == 1
 
     def test_reproducibility_with_seed(self, short_config: SimulationConfig):
@@ -230,14 +243,14 @@ class TestSimulationEngine:
         engine1 = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=12345,
         )
 
         engine2 = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=12345,
         )
 
@@ -254,14 +267,14 @@ class TestSimulationEngine:
         engine1 = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=111,
         )
 
         engine2 = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=222,
         )
 
@@ -278,7 +291,7 @@ class TestSimulationEngine:
         engine = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
@@ -294,7 +307,7 @@ class TestSimulationEngine:
         engine = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
@@ -313,7 +326,7 @@ class TestSimulationEngine:
         engine = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
@@ -342,7 +355,7 @@ class TestSimulationEngine:
         engine_low = SimulationEngine(
             config=short_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.20,
+            connectivity_level=CONNECTIVITY_SEVERE,
             random_seed=42,
         )
         results_low = engine_low.run()
@@ -392,7 +405,7 @@ class TestTopologyAdapter:
         responders = adapter.get_all_responder_ids()
 
         # Should have 48 mobile responders
-        assert len(responders) == 48
+        assert len(responders) == MOBILE_RESPONDER_COUNT
         for r_id in responders:
             assert r_id.startswith("mobile_")
 
@@ -448,14 +461,14 @@ class TestExperimentRunner:
 
         results = runner.run_single_configuration(
             algorithm=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             runs=2,
         )
 
         assert len(results) == 2
         for r in results:
             assert r.algorithm == AlgorithmType.ADAPTIVE
-            assert r.connectivity_level == 0.75
+            assert r.connectivity_level == CONNECTIVITY_MILD
 
     def test_run_all_quick(self, quick_config: SimulationConfig):
         """Test running all configurations (quick version)."""
@@ -463,7 +476,7 @@ class TestExperimentRunner:
 
         results = runner.run_all(
             algorithms=[AlgorithmType.ADAPTIVE],
-            connectivity_levels=[0.75],
+            connectivity_levels=[CONNECTIVITY_MILD],
             runs_per_config=2,
         )
 
@@ -476,7 +489,7 @@ class TestExperimentRunner:
 
         results = runner.run_all(
             algorithms=[AlgorithmType.ADAPTIVE, AlgorithmType.BASELINE],
-            connectivity_levels=[0.75],
+            connectivity_levels=[CONNECTIVITY_MILD],
             runs_per_config=2,
         )
 
@@ -495,7 +508,7 @@ class TestExperimentRunner:
 
         runner.run_all(
             algorithms=[AlgorithmType.ADAPTIVE, AlgorithmType.BASELINE],
-            connectivity_levels=[0.75],
+            connectivity_levels=[CONNECTIVITY_MILD],
             runs_per_config=2,
         )
 
@@ -508,12 +521,12 @@ class TestExperimentRunner:
 
         runner.run_all(
             algorithms=[AlgorithmType.ADAPTIVE],
-            connectivity_levels=[0.75, 0.40],
+            connectivity_levels=[CONNECTIVITY_MILD, CONNECTIVITY_MODERATE],
             runs_per_config=2,
         )
 
-        conn_75 = runner.get_results_by_connectivity(0.75)
-        conn_40 = runner.get_results_by_connectivity(0.40)
+        conn_75 = runner.get_results_by_connectivity(CONNECTIVITY_MILD)
+        conn_40 = runner.get_results_by_connectivity(CONNECTIVITY_MODERATE)
 
         assert len(conn_75) == 2
         assert len(conn_40) == 2
@@ -529,7 +542,7 @@ class TestExperimentRunner:
 
         runner.run_all(
             algorithms=[AlgorithmType.ADAPTIVE],
-            connectivity_levels=[0.75],
+            connectivity_levels=[CONNECTIVITY_MILD],
             runs_per_config=2,
             progress_callback=callback,
         )
@@ -550,24 +563,24 @@ class TestConvenienceFunctions:
         """Test run_simulation convenience function."""
         results = run_simulation(
             algorithm="adaptive",
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
         assert results.algorithm == AlgorithmType.ADAPTIVE
-        assert results.connectivity_level == 0.75
+        assert results.connectivity_level == CONNECTIVITY_MILD
         assert results.total_tasks > 0
 
     def test_run_simulation_baseline(self):
         """Test run_simulation with baseline algorithm."""
         results = run_simulation(
             algorithm="baseline",
-            connectivity_level=0.40,
+            connectivity_level=CONNECTIVITY_MODERATE,
             random_seed=42,
         )
 
         assert results.algorithm == AlgorithmType.BASELINE
-        assert results.connectivity_level == 0.40
+        assert results.connectivity_level == CONNECTIVITY_MODERATE
 
 
 # =============================================================================
@@ -581,27 +594,27 @@ class TestPhase5Parameters:
     def test_default_duration(self):
         """Verify default duration = 6000 seconds."""
         config = SimulationConfig()
-        assert config.scenario.simulation_duration_seconds == 6000
+        assert config.scenario.simulation_duration_seconds == SIMULATION_DURATION_S
 
     def test_default_runs_per_config(self):
         """Verify default runs per config = 30."""
         config = SimulationConfig()
-        assert config.scenario.runs_per_configuration == 30
+        assert config.scenario.runs_per_configuration == RUNS_PER_CONFIG
 
     def test_total_experimental_runs(self):
         """Verify total runs = 180 (2 × 3 × 30)."""
         config = SimulationConfig()
-        assert config.total_experimental_runs == 180
+        assert config.total_experimental_runs == TOTAL_EXPERIMENTAL_RUNS
 
     def test_update_interval(self):
         """Verify coordination update interval = 1800 seconds (30 min)."""
         config = SimulationConfig()
-        assert config.coordination.update_interval_seconds == 1800
+        assert config.coordination.update_interval_seconds == COORDINATION_INTERVAL_S
 
     def test_connectivity_scenarios(self):
         """Verify connectivity scenarios = [0.75, 0.40, 0.20]."""
         config = SimulationConfig()
-        assert config.network.connectivity_scenarios == [0.75, 0.40, 0.20]
+        assert config.network.connectivity_scenarios == CONNECTIVITY_SCENARIOS
 
 
 # =============================================================================
@@ -618,7 +631,7 @@ class TestSimulationIntegration:
         return SimulationConfig(
             scenario=ScenarioParameters(
                 simulation_duration_seconds=600,
-                message_rate_per_minute=2.0,
+                message_rate_per_minute=MESSAGE_RATE_PER_MIN,
             ),
             coordination=CoordinationParameters(
                 update_interval_seconds=120,
@@ -630,7 +643,7 @@ class TestSimulationIntegration:
         engine = SimulationEngine(
             config=integration_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
@@ -645,7 +658,7 @@ class TestSimulationIntegration:
         engine = SimulationEngine(
             config=integration_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
@@ -660,7 +673,7 @@ class TestSimulationIntegration:
         engine = SimulationEngine(
             config=integration_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
@@ -675,7 +688,7 @@ class TestSimulationIntegration:
         engine = SimulationEngine(
             config=integration_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
@@ -689,7 +702,7 @@ class TestSimulationIntegration:
         engine = SimulationEngine(
             config=integration_config,
             algorithm_type=AlgorithmType.ADAPTIVE,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 

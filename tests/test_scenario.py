@@ -25,6 +25,21 @@ from ercs.config.parameters import (
     UrgencyDistribution,
     UrgencyLevel,
 )
+from conftest import (
+    ALGORITHMS,
+    CONNECTIVITY_MILD,
+    CONNECTIVITY_MODERATE,
+    CONNECTIVITY_SCENARIOS,
+    CONNECTIVITY_SEVERE,
+    MESSAGE_RATE_PER_MIN,
+    RUNS_PER_CONFIG,
+    SIMULATION_DURATION_S,
+    TOTAL_EXPERIMENTAL_RUNS,
+    URGENCY_HIGH_PROP,
+    URGENCY_LOW_PROP,
+    URGENCY_MEDIUM_PROP,
+    WARMUP_PERIOD_S,
+)
 from ercs.scenario import (
     ExperimentConfiguration,
     Scenario,
@@ -169,18 +184,18 @@ class TestScenario:
         return Scenario(
             scenario_id="test_scenario",
             tasks=sample_tasks,
-            duration_seconds=6000,
+            duration_seconds=SIMULATION_DURATION_S,
             parameters=ScenarioParameters(),
             random_seed=42,
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
         )
 
     def test_scenario_creation(self, scenario: Scenario):
         """Test scenario creation."""
         assert scenario.scenario_id == "test_scenario"
         assert scenario.total_tasks == 5
-        assert scenario.duration_seconds == 6000
-        assert scenario.connectivity_level == 0.75
+        assert scenario.duration_seconds == SIMULATION_DURATION_S
+        assert scenario.connectivity_level == CONNECTIVITY_MILD
 
     def test_urgency_counts(self, scenario: Scenario):
         """Test urgency level counts."""
@@ -224,8 +239,8 @@ class TestScenario:
 
         assert summary["scenario_id"] == "test_scenario"
         assert summary["total_tasks"] == 5
-        assert summary["duration_seconds"] == 6000
-        assert summary["connectivity_level"] == 0.75
+        assert summary["duration_seconds"] == SIMULATION_DURATION_S
+        assert summary["connectivity_level"] == CONNECTIVITY_MILD
         assert summary["urgency_distribution"]["high"] == 2
         assert summary["urgency_distribution"]["medium"] == 2
         assert summary["urgency_distribution"]["low"] == 1
@@ -254,13 +269,13 @@ class TestScenarioGenerator:
         """Test basic scenario generation."""
         scenario = generator.generate(
             scenario_id="test_001",
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
         )
 
         assert scenario.scenario_id == "test_001"
-        assert scenario.connectivity_level == 0.75
+        assert scenario.connectivity_level == CONNECTIVITY_MILD
         assert scenario.total_tasks > 0
-        assert scenario.duration_seconds == 6000
+        assert scenario.duration_seconds == SIMULATION_DURATION_S
 
     def test_poisson_arrival_rate(self, generator: ScenarioGenerator):
         """Test that arrival rate approximately matches 2/minute.
@@ -278,7 +293,7 @@ class TestScenarioGenerator:
             total_tasks += scenario.total_tasks
 
         avg_tasks = total_tasks / num_scenarios
-        expected_tasks = 2.0 * (6000 / 60)  # 2/min * 100 min = 200
+        expected_tasks = MESSAGE_RATE_PER_MIN * (SIMULATION_DURATION_S / 60)  # 2/min * 100 min = 200
 
         # Should be within 20% of expected
         assert abs(avg_tasks - expected_tasks) / expected_tasks < 0.2
@@ -375,7 +390,7 @@ class TestScenarioGenerator:
         """Test batch scenario generation."""
         scenarios = generator.generate_batch(
             count=5,
-            connectivity_levels=[0.75, 0.40],
+            connectivity_levels=[CONNECTIVITY_MILD, CONNECTIVITY_MODERATE],
             base_seed=42,
         )
 
@@ -383,8 +398,8 @@ class TestScenarioGenerator:
         assert len(scenarios) == 10
 
         # Check connectivity levels
-        conn_75 = [s for s in scenarios if s.connectivity_level == 0.75]
-        conn_40 = [s for s in scenarios if s.connectivity_level == 0.40]
+        conn_75 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MILD]
+        conn_40 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MODERATE]
 
         assert len(conn_75) == 5
         assert len(conn_40) == 5
@@ -412,9 +427,9 @@ class TestExperimentConfiguration:
 
     def test_default_configuration(self, config: ExperimentConfiguration):
         """Test default configuration matches spec."""
-        assert config.algorithms == ["adaptive", "baseline"]
-        assert config.connectivity_levels == [0.75, 0.40, 0.20]
-        assert config.runs_per_config == 30
+        assert config.algorithms == ALGORITHMS
+        assert config.connectivity_levels == CONNECTIVITY_SCENARIOS
+        assert config.runs_per_config == RUNS_PER_CONFIG
 
     def test_total_configurations(self, config: ExperimentConfiguration):
         """Test total configuration count (2 algorithms × 3 connectivity)."""
@@ -422,13 +437,13 @@ class TestExperimentConfiguration:
 
     def test_total_runs(self, config: ExperimentConfiguration):
         """Test total runs (6 configs × 30 runs = 180)."""
-        assert config.total_runs == 180
+        assert config.total_runs == TOTAL_EXPERIMENTAL_RUNS
 
     def test_configuration_matrix(self, config: ExperimentConfiguration):
         """Test configuration matrix generation."""
         matrix = config.get_configuration_matrix()
 
-        assert len(matrix) == 180
+        assert len(matrix) == TOTAL_EXPERIMENTAL_RUNS
 
         # Check all combinations exist
         algorithms_seen = set()
@@ -440,16 +455,16 @@ class TestExperimentConfiguration:
             assert "random_seed" in cfg
             assert "run_number" in cfg
 
-        assert algorithms_seen == {"adaptive", "baseline"}
-        assert connectivities_seen == {0.75, 0.40, 0.20}
+        assert algorithms_seen == set(ALGORITHMS)
+        assert connectivities_seen == set(CONNECTIVITY_SCENARIOS)
 
     def test_filter_by_algorithm(self, config: ExperimentConfiguration):
         """Test filtering configurations by algorithm."""
         adaptive_configs = config.get_configurations_for_algorithm("adaptive")
         baseline_configs = config.get_configurations_for_algorithm("baseline")
 
-        assert len(adaptive_configs) == 90  # 3 connectivity × 30 runs
-        assert len(baseline_configs) == 90
+        assert len(adaptive_configs) == len(CONNECTIVITY_SCENARIOS) * RUNS_PER_CONFIG
+        assert len(baseline_configs) == len(CONNECTIVITY_SCENARIOS) * RUNS_PER_CONFIG
 
         for cfg in adaptive_configs:
             assert cfg["algorithm"] == "adaptive"
@@ -460,9 +475,9 @@ class TestExperimentConfiguration:
         configs_40 = config.get_configurations_for_connectivity(0.40)
         configs_20 = config.get_configurations_for_connectivity(0.20)
 
-        assert len(configs_75) == 60  # 2 algorithms × 30 runs
-        assert len(configs_40) == 60
-        assert len(configs_20) == 60
+        assert len(configs_75) == len(ALGORITHMS) * RUNS_PER_CONFIG
+        assert len(configs_40) == len(ALGORITHMS) * RUNS_PER_CONFIG
+        assert len(configs_20) == len(ALGORITHMS) * RUNS_PER_CONFIG
 
     def test_custom_configuration(self):
         """Test custom experiment configuration."""
@@ -479,13 +494,13 @@ class TestExperimentConfiguration:
         """Test configuration summary."""
         summary = config.summary()
 
-        assert summary["algorithms"] == ["adaptive", "baseline"]
-        assert summary["connectivity_levels"] == [0.75, 0.40, 0.20]
-        assert summary["runs_per_configuration"] == 30
+        assert summary["algorithms"] == ALGORITHMS
+        assert summary["connectivity_levels"] == CONNECTIVITY_SCENARIOS
+        assert summary["runs_per_configuration"] == RUNS_PER_CONFIG
         assert summary["total_configurations"] == 6
-        assert summary["total_runs"] == 180
-        assert summary["simulation_duration_seconds"] == 6000
-        assert summary["message_rate_per_minute"] == 2.0
+        assert summary["total_runs"] == TOTAL_EXPERIMENTAL_RUNS
+        assert summary["simulation_duration_seconds"] == SIMULATION_DURATION_S
+        assert summary["message_rate_per_minute"] == MESSAGE_RATE_PER_MIN
 
 
 # =============================================================================
@@ -499,27 +514,27 @@ class TestConvenienceFunctions:
     def test_generate_scenario_function(self):
         """Test generate_scenario convenience function."""
         scenario = generate_scenario(
-            connectivity_level=0.75,
+            connectivity_level=CONNECTIVITY_MILD,
             random_seed=42,
         )
 
         assert scenario.total_tasks > 0
-        assert scenario.connectivity_level == 0.75
-        assert scenario.duration_seconds == 6000
+        assert scenario.connectivity_level == CONNECTIVITY_MILD
+        assert scenario.duration_seconds == SIMULATION_DURATION_S
 
     def test_generate_experiment_scenarios_function(self):
         """Test generate_experiment_scenarios convenience function."""
         scenarios = generate_experiment_scenarios(
             runs_per_connectivity=5,
-            connectivity_levels=[0.75, 0.40],
+            connectivity_levels=[CONNECTIVITY_MILD, CONNECTIVITY_MODERATE],
             base_seed=42,
         )
 
         assert len(scenarios) == 10  # 5 × 2 connectivity levels
 
         # Verify connectivity distribution
-        conn_75 = [s for s in scenarios if s.connectivity_level == 0.75]
-        conn_40 = [s for s in scenarios if s.connectivity_level == 0.40]
+        conn_75 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MILD]
+        conn_40 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MODERATE]
 
         assert len(conn_75) == 5
         assert len(conn_40) == 5
@@ -536,37 +551,37 @@ class TestPhase3Parameters:
     def test_message_rate(self):
         """Verify message rate = 2/minute (Kumar et al., 2023)."""
         params = ScenarioParameters()
-        assert params.message_rate_per_minute == 2.0
+        assert params.message_rate_per_minute == MESSAGE_RATE_PER_MIN
 
     def test_simulation_duration(self):
         """Verify duration = 6000 seconds (Ullah & Qayyum, 2022)."""
         params = ScenarioParameters()
-        assert params.simulation_duration_seconds == 6000
+        assert params.simulation_duration_seconds == SIMULATION_DURATION_S
 
     def test_warmup_period(self):
         """Verify no warm-up period (Grassmann, 2008)."""
         params = ScenarioParameters()
-        assert params.warmup_period_seconds == 0
+        assert params.warmup_period_seconds == WARMUP_PERIOD_S
 
     def test_runs_per_configuration(self):
         """Verify 30 runs per configuration (Law, 2015)."""
         params = ScenarioParameters()
-        assert params.runs_per_configuration == 30
+        assert params.runs_per_configuration == RUNS_PER_CONFIG
 
     def test_urgency_distribution_high(self):
         """Verify high urgency = 20% (Li et al., 2025)."""
         dist = UrgencyDistribution()
-        assert dist.high == 0.20
+        assert dist.high == URGENCY_HIGH_PROP
 
     def test_urgency_distribution_medium(self):
         """Verify medium urgency = 50% (Li et al., 2025)."""
         dist = UrgencyDistribution()
-        assert dist.medium == 0.50
+        assert dist.medium == URGENCY_MEDIUM_PROP
 
     def test_urgency_distribution_low(self):
         """Verify low urgency = 30% (Li et al., 2025)."""
         dist = UrgencyDistribution()
-        assert dist.low == 0.30
+        assert dist.low == URGENCY_LOW_PROP
 
     def test_urgency_distribution_sums_to_one(self):
         """Verify urgency proportions sum to 1.0."""
@@ -611,8 +626,8 @@ class TestPoissonStatistics:
             intervals = [times[j + 1] - times[j] for j in range(len(times) - 1)]
             all_intervals.extend(intervals)
 
-        # Expected mean = 60/2 = 30 seconds (for rate of 2/min)
-        expected_mean = 30.0
+        # Expected mean = 60/rate seconds (for rate of 2/min)
+        expected_mean = 60.0 / MESSAGE_RATE_PER_MIN
         actual_mean = np.mean(all_intervals)
 
         # Should be within 10% of expected
