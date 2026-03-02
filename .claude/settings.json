@@ -15,7 +15,15 @@
       "Bash(python scripts/run_animation.py --mode paths --duration 3600 --no-display --save outputs/diag_paths.png)",
       "Bash(python scripts/diagnose_encounters.py --duration 6000 --connectivity 0.75 --seed 42)",
       "Bash(python scripts/diagnose_encounters.py --duration 6000 --connectivity 0.40 --seed 42)",
-      "Bash(python scripts/diagnose_encounters.py --duration 6000 --connectivity 0.20 --seed 42)"
+      "Bash(python scripts/diagnose_encounters.py --duration 6000 --connectivity 0.20 --seed 42)",
+      "Bash(python scripts/diagnose_encounters.py --connectivity 0.75 --algorithm baseline --seed 42)",
+      "Bash(python scripts/diagnose_encounters.py --connectivity 0.20 --algorithm baseline --seed 42)",
+      "Bash(for algo in adaptive baseline)",
+      "Bash(do for conn in 0.75 0.40 0.20)",
+      "Bash(do for seed in 42 43 44 45 46)",
+      "Bash(do python scripts/diagnose_encounters.py --duration 6000 --connectivity $conn --algorithm $algo --seed $seed)",
+      "Bash(echo \"[$algo conn=$conn seed=$seed]\")",
+      "Bash(done)"
     ],
     "additionalDirectories": [
       "/Users/dianafonseca/resilient-emergency-response/outputs/figures"

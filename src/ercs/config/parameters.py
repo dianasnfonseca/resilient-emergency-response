@@ -140,7 +140,7 @@ class NetworkParameters(BaseModel):
 
     coordination_zone: ZoneConfig = Field(
         default_factory=lambda: ZoneConfig(
-            width_m=50.0, height_m=50.0, origin_x=2900.0, origin_y=725.0
+            width_m=50.0, height_m=50.0, origin_x=800.0, origin_y=300.0
         ),
         description="Coordination zone. Source: Adapted from Ullah & Qayyum (2022)",
     )
@@ -167,9 +167,9 @@ class NetworkParameters(BaseModel):
     )
 
     buffer_size_bytes: int = Field(
-        default=5_242_880,  # 5 MB
+        default=26_214_400,  # 25 MB
         gt=0,
-        description="Node buffer capacity (5 MB). Source: Ullah & Qayyum (2022)",
+        description="Node buffer capacity (25 MB). Source: Ullah & Qayyum (2022) — max tested value, avoids congestion-dominated regime",
     )
 
     message_size_bytes: int = Field(

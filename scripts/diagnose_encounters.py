@@ -60,7 +60,7 @@ class DiagnosticEngine(SimulationEngine):
                     self._min_distances[cid] = (dist, event.timestamp)
 
 
-def run_diagnostic(duration=6000, connectivity=0.75, seed=42):
+def run_diagnostic(duration=6000, connectivity=0.75, seed=42, algorithm="adaptive"):
     config = SimulationConfig()
     config = config.model_copy(
         update={
@@ -70,15 +70,17 @@ def run_diagnostic(duration=6000, connectivity=0.75, seed=42):
         }
     )
 
+    algo = AlgorithmType.ADAPTIVE if algorithm == "adaptive" else AlgorithmType.BASELINE
+
     engine = DiagnosticEngine(
         config=config,
-        algorithm_type=AlgorithmType.ADAPTIVE,
+        algorithm_type=algo,
         connectivity_level=connectivity,
         random_seed=seed,
     )
 
     # Run simulation
-    print(f"Running simulation ({duration}s, connectivity={connectivity}, seed={seed})...")
+    print(f"Running simulation ({duration}s, connectivity={connectivity}, seed={seed}, {algorithm})...")
     results = engine.run()
 
     # -- Report --
@@ -186,5 +188,6 @@ if __name__ == "__main__":
     parser.add_argument("--duration", type=int, default=6000)
     parser.add_argument("--connectivity", type=float, default=0.75)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--algorithm", choices=["adaptive", "baseline"], default="adaptive")
     args = parser.parse_args()
-    run_diagnostic(args.duration, args.connectivity, args.seed)
+    run_diagnostic(args.duration, args.connectivity, args.seed, args.algorithm)

@@ -304,7 +304,7 @@ for statistical inference (Law, 2015).
 | Total nodes | 50 | 2 coordination + 48 mobile |
 | Simulation area | 3000 × 1500 m | Full operational theatre |
 | Incident zone | 700 × 600 m | Where tasks appear, responders start |
-| Coordination zone | 50 × 50 m | Fixed infrastructure, origin (2900, 725) |
+| Coordination zone | 50 × 50 m | Fixed infrastructure, origin (800, 300) |
 | Radio range | 100 m | Nodes must be this close to communicate |
 | Buffer size | 5 MB per node | Message storage capacity |
 | Message size | 512 KB | Per coordination message |
@@ -424,26 +424,27 @@ python scripts/run_experiment.py --config configs/default.yaml --dry-run
 ## 9. Spatial Layout
 
 ```
- 0                  700                                               3000
- ┌───────────────────┬────────────────────────────────────────────────┐
- │                   │                                                │ 1500
- │                   │                                                │
- │                   │               SIMULATION AREA                  │
- │   INCIDENT ZONE   │               (3000 × 1500m)                  │
- │   (700 × 600m)    │                                                │
- │   y: 450–1050     │               Mobile nodes traverse           │
- │   Tasks appear     │               the full area via     ┌──────┐  │
- │   here.            │               Random Waypoint.      │COORD │  │ ~y=750
- │   Responders       │                                     │ZONE  │  │
- │   start here.      │                                     │50×50 │  │
- │                   │                                     └──────┘  │
- ├───────────────────┘                                   (2900, 725)  │
- │                                                                    │
- │                                                                    │
- └────────────────────────────────────────────────────────────────────┘
+ 0        700  850                                                    3000
+ ┌─────────┬───┬─────────────────────────────────────────────────────┐
+ │         │   │                                                     │ 1500
+ │         │   │                                                     │
+ │ INCIDENT│   │                                                     │
+ │  ZONE   │   │            SIMULATION AREA                          │
+ │ 700×600 │   │            (3000 × 1500m)                           │
+ │ y:450–  │   │                                                     │
+ │   1050  │   │            Mobile nodes traverse                    │
+ │         │┌──┤            the full area via                        │
+ │ Tasks   ││CO│            Random Waypoint.                         │
+ │ appear  ││RD│ ← ~100m gap                                        │
+ │ here.   ││50│   between zones                                    │
+ │         │└──┤   (800, 300)                                        │
+ ├─────────┘   │                                                     │
+ │             │                                                     │
+ └─────────────┴─────────────────────────────────────────────────────┘
  Radio range: 100m — nodes must be this close to form an edge
 ```
 
-Both zones are vertically centred at ~y=750. Coordination nodes are ~2200m
-horizontally from the incident zone. With a 100m radio range, messages must
-relay through intermediate mobile nodes to reach responders.
+The coordination zone at (800, 300) sits ~100m from the incident zone
+boundary. This separation requires 2–3 relay hops for message delivery,
+exercising the PRoPHET routing protocol while remaining achievable within
+the 6000s simulation window.

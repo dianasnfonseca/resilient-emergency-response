@@ -396,18 +396,17 @@ class TestZoneBoundaryConditions:
         assert params.simulation_area.width_m == SIMULATION_AREA_WIDTH_M
         assert params.simulation_area.height_m == SIMULATION_AREA_HEIGHT_M
     
-    def test_coordination_zone_at_eastern_edge(self):
-        """Verify coordination zone is positioned at eastern edge."""
+    def test_coordination_zone_outside_incident_zone(self):
+        """Verify coordination zone is outside but near the incident zone."""
         params = NetworkParameters()
-        
-        # Coordination zone should be near the right edge (x ≈ 2900)
+
         coord_zone = params.coordination_zone
-        sim_area = params.simulation_area
-        
-        # Zone should end near the simulation area's right boundary
-        zone_right_edge = coord_zone.origin_x + coord_zone.width_m
-        assert zone_right_edge <= sim_area.width_m
-        assert zone_right_edge >= sim_area.width_m - 200  # Within 200m of edge
+        incident_zone = params.incident_zone
+
+        # Coord zone should be just beyond the incident zone's right boundary
+        incident_right = incident_zone.origin_x + incident_zone.width_m
+        assert coord_zone.origin_x >= incident_right  # Not overlapping
+        assert coord_zone.origin_x <= incident_right + 500  # Within 500m
     
     def test_incident_zone_at_western_portion(self):
         """Verify incident zone is in western portion of simulation area."""

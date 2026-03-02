@@ -593,11 +593,11 @@ class SimulationEngine:
         """Handle coordination cycle event."""
         self._log_event(event.event_type, event.timestamp, event.data)
 
-        # Get a coordination node
+        # Get coordination nodes
         coord_nodes = self._topology.get_coordination_node_ids()
         coord_node = coord_nodes[0] if coord_nodes else "coord_0"
 
-        # Run coordination
+        # Run coordination (uses first coord node for network state queries)
         assignments = self._manager.run_coordination_cycle(
             responder_locator=self._adapter,
             network_state=self._adapter,
@@ -605,17 +605,20 @@ class SimulationEngine:
             current_time=event.timestamp,
         )
 
-        # Process assignments
-        for assignment in assignments:
+        # Process assignments — distribute messages across coord nodes (round-robin)
+        for i, assignment in enumerate(assignments):
             results.tasks_assigned += 1
 
             # Record response time
             response_time = event.timestamp - assignment.task.creation_time
             results.response_times.append((assignment.task_id, response_time))
 
+            # Round-robin: distribute message origination across coord nodes
+            source_node = coord_nodes[i % len(coord_nodes)]
+
             # Create assignment message
             message = self._communication.create_message(
-                source_id=coord_node,
+                source_id=source_node,
                 destination_id=assignment.responder_id,
                 message_type=MessageType.COORDINATION,
                 payload={

@@ -35,12 +35,12 @@ network:
   coordination_zone:
     width_m: 50.0
     height_m: 50.0
-    origin_x: 2900.0
-    origin_y: 725.0
+    origin_x: 800.0
+    origin_y: 300.0
   coordination_node_count: 2
   mobile_responder_count: 48
   radio_range_m: 100.0
-  buffer_size_bytes: 5242880  # 5 MB
+  buffer_size_bytes: 26214400  # 25 MB
   message_size_bytes: 512000  # 500 kB
   mobility_model: random_waypoint
   speed_min_mps: 0.0
