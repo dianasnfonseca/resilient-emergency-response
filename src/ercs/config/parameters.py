@@ -291,9 +291,12 @@ class CommunicationParameters(BaseModel):
     )
 
     update_interval_seconds: float = Field(
-        default=0.1,
+        default=30.0,
         gt=0,
-        description="Predictability update interval. Source: Kumar et al. (2023)",
+        description="Predictability aging time unit in seconds. "
+        "γ^k applied where k = elapsed / update_interval. "
+        "30s aligns aging rate with NODE_ENCOUNTER interval (10s) "
+        "so ~3 encounters per aging unit. Source: Kumar et al. (2023)",
     )
 
     buffer_drop_policy: BufferDropPolicy = Field(

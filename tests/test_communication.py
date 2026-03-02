@@ -945,9 +945,9 @@ class TestPhase2Parameters:
         assert params.transmit_speed_bps == 2_000_000
 
     def test_update_interval(self):
-        """Verify update interval = 0.1 time units (Kumar et al., 2023)."""
+        """Verify update interval = 30.0s (aging time unit, Kumar et al., 2023)."""
         params = CommunicationParameters()
-        assert params.update_interval_seconds == 0.1
+        assert params.update_interval_seconds == 30.0
 
     def test_buffer_drop_policy(self):
         """Verify buffer drop policy = drop_oldest (Ullah & Qayyum, 2022)."""
@@ -1055,9 +1055,9 @@ class TestCommunicationIntegration:
         assert p2 > p1  # Should increase due to encounter update
 
         # Age directly without encounter (should decrease)
-        # First update the last aging time to create elapsed time
+        # Elapsed must exceed update_interval (30s) for aging to apply (k >= 1)
         layer.predictability._last_aging_time["mobile_0"] = 0.0
-        layer.predictability.age_predictabilities("mobile_0", current_time=10.0)
+        layer.predictability.age_predictabilities("mobile_0", current_time=60.0)
         p3 = layer.get_delivery_predictability("mobile_0", "mobile_1")
         assert p3 < p2  # Should decrease due to aging
 

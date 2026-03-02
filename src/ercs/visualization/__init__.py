@@ -17,6 +17,12 @@ from ercs.visualization.plots import (
     plot_heatmap,
     save_figure,
 )
+from ercs.visualization.animation import (
+    AnimationEngine,
+    FrameData,
+    create_animation,
+    run_paired_simulation,
+)
 
 __all__ = [
     "ALGORITHM_LABELS",
@@ -34,4 +40,9 @@ __all__ = [
     "plot_grouped_bars",
     "plot_heatmap",
     "save_figure",
+    # Animation
+    "AnimationEngine",
+    "FrameData",
+    "create_animation",
+    "run_paired_simulation",
 ]
