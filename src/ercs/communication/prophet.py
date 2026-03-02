@@ -599,7 +599,7 @@ class TransmissionResult:
     transmission_time: float  # Time taken in seconds
     source_node: str
     target_node: str
-    reason: str = ""  # Failure reason if not successful
+    reason: str = ""  # "delivered", "forwarded", or "buffer_full"
 
 
 class CommunicationLayer:

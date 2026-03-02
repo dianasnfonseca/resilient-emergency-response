@@ -7,6 +7,8 @@ Shows two synchronized panels with:
 - Task locations by urgency (stars: red=HIGH, orange=MEDIUM, green=LOW)
 - Message delivery flash effects
 - Live metrics counters
+- Buffer utilisation indicators (node size)
+- PRoPHET predictability snapshots
 
 Usage:
     python scripts/run_animation.py --duration 600 --sample-interval 10
@@ -40,13 +42,19 @@ URGENCY_COLORS: dict[UrgencyLevel, str] = {
 }
 
 COORDINATION_COLOR = "#9467BD"
-EDGE_COLOR = "#CCCCCC"
-EDGE_ALPHA = 0.3
+EDGE_COLOR = "#999999"
+EDGE_ALPHA = 0.5
 
 ZONE_STYLES = {
     "incident": {"facecolor": "#FFF3E0", "edgecolor": "#FF9800", "linestyle": "--"},
     "coordination": {"facecolor": "#E8EAF6", "edgecolor": "#3F51B5", "linestyle": "--"},
 }
+
+# Node size range for buffer utilisation indicator
+NODE_SIZE_MIN = 20
+NODE_SIZE_MAX = 60
+# Number of past positions to keep for movement trails
+TRAIL_LENGTH = 5
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +75,15 @@ class TaskSnapshot:
 
 
 @dataclass
+class BufferSnapshot:
+    """Per-node buffer state at a point in time."""
+
+    message_count: int
+    utilisation: float  # 0.0 – 1.0
+    message_ids: list[str]
+
+
+@dataclass
 class MetricsSnapshot:
     """Cumulative simulation metrics at a point in time."""
 
@@ -75,6 +92,17 @@ class MetricsSnapshot:
     messages_created: int
     messages_delivered: int
     messages_expired: int
+
+
+@dataclass
+class ForwardingEntry:
+    """Single message hop record."""
+
+    timestamp: float
+    message_id: str
+    from_node: str
+    to_node: str
+    reason: str  # "delivered", "forwarded", "buffer_full", etc.
 
 
 @dataclass
@@ -89,6 +117,11 @@ class FrameData:
     metrics: MetricsSnapshot
     recent_deliveries: list[str] = field(default_factory=list)
     recent_assignments: list[str] = field(default_factory=list)
+    # Extended fields for diagnostics
+    predictabilities: dict[tuple[str, str], float] = field(default_factory=dict)
+    buffer_summary: dict[str, BufferSnapshot] = field(default_factory=dict)
+    edge_count: int = 0
+    node_trails: dict[str, list[tuple[float, float]]] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +159,8 @@ class AnimationEngine(SimulationEngine):
         self._last_sample_time: float = -sample_interval
         self._delivery_log: list[tuple[str, float]] = []
         self._assignment_log: list[tuple[str, float]] = []
+        self._forwarding_log: list[ForwardingEntry] = []
+        self._trail_history: dict[str, list[tuple[float, float]]] = {}
 
     def _handle_mobility_update(self, event, results):
         """Override to capture snapshots at sample intervals."""
@@ -150,8 +185,20 @@ class AnimationEngine(SimulationEngine):
                     break
 
     def _process_delivered_messages(self, delivered, timestamp, results):
-        """Override to track delivery times for flash effects."""
+        """Override to track all transmission results for diagnostics."""
         for result in delivered:
+            self._forwarding_log.append(
+                ForwardingEntry(
+                    timestamp=timestamp,
+                    message_id=result.message.message_id,
+                    from_node=result.source_node,
+                    to_node=result.target_node,
+                    reason=result.reason if not result.success else (
+                        "delivered" if result.target_node == result.message.destination_id
+                        else "forwarded"
+                    ),
+                )
+            )
             if result.success:
                 self._delivery_log.append(
                     (result.message.message_id, timestamp)
@@ -167,6 +214,17 @@ class AnimationEngine(SimulationEngine):
             types[node_id] = node.node_type.value
 
         edges = list(self._topology.graph.edges())
+
+        # Update movement trails (keep last TRAIL_LENGTH positions)
+        for node_id, pos in positions.items():
+            if types.get(node_id) == NodeType.MOBILE_RESPONDER.value:
+                trail = self._trail_history.setdefault(node_id, [])
+                trail.append(pos)
+                if len(trail) > TRAIL_LENGTH:
+                    trail.pop(0)
+        node_trails = {
+            nid: list(trail) for nid, trail in self._trail_history.items()
+        }
 
         task_snaps = []
         for task in self._scenario.tasks:
@@ -190,6 +248,24 @@ class AnimationEngine(SimulationEngine):
             messages_expired=results.messages_expired,
         )
 
+        # Capture predictability snapshot (only P > 0.01 to keep it compact)
+        pred_snapshot: dict[tuple[str, str], float] = {}
+        for node_id in self._communication.buffers:
+            preds = self._communication.predictability.get_all_predictabilities(node_id)
+            for dest_id, p_val in preds.items():
+                if p_val > 0.01:
+                    pred_snapshot[(node_id, dest_id)] = p_val
+
+        # Capture buffer summary
+        buf_summary: dict[str, BufferSnapshot] = {}
+        for node_id, buf in self._communication.buffers.items():
+            msg_ids = [m.message_id for m in buf]
+            buf_summary[node_id] = BufferSnapshot(
+                message_count=buf.message_count,
+                utilisation=buf.utilisation,
+                message_ids=msg_ids,
+            )
+
         cutoff = timestamp - self.flash_window
         recent_del = [mid for mid, t in self._delivery_log if t >= cutoff]
         recent_asgn = [tid for tid, t in self._assignment_log if t >= cutoff]
@@ -204,12 +280,20 @@ class AnimationEngine(SimulationEngine):
                 metrics=metrics,
                 recent_deliveries=recent_del,
                 recent_assignments=recent_asgn,
+                predictabilities=pred_snapshot,
+                buffer_summary=buf_summary,
+                edge_count=len(edges),
+                node_trails=node_trails,
             )
         )
 
     def get_frames(self) -> list[FrameData]:
         """Return captured frames."""
         return list(self._frames)
+
+    def get_forwarding_log(self) -> list[ForwardingEntry]:
+        """Return the complete forwarding log."""
+        return list(self._forwarding_log)
 
 
 # ---------------------------------------------------------------------------
@@ -223,12 +307,12 @@ def run_paired_simulation(
     seed: int = 42,
     sample_interval: float = 30.0,
     progress_callback=None,
-) -> tuple[list[FrameData], list[FrameData]]:
+) -> tuple[list[FrameData], list[FrameData], list[ForwardingEntry], list[ForwardingEntry]]:
     """
     Run both Adaptive and Baseline with the same seed and capture frames.
 
     Returns:
-        (adaptive_frames, baseline_frames)
+        (adaptive_frames, baseline_frames, adaptive_forwarding_log, baseline_forwarding_log)
     """
     config = config or SimulationConfig()
 
@@ -244,6 +328,7 @@ def run_paired_simulation(
     )
     adaptive_engine.run()
     adaptive_frames = adaptive_engine.get_frames()
+    adaptive_fwd = adaptive_engine.get_forwarding_log()
 
     if progress_callback:
         progress_callback("Running Baseline simulation...")
@@ -257,8 +342,9 @@ def run_paired_simulation(
     )
     baseline_engine.run()
     baseline_frames = baseline_engine.get_frames()
+    baseline_fwd = baseline_engine.get_forwarding_log()
 
-    return adaptive_frames, baseline_frames
+    return adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd
 
 
 # ---------------------------------------------------------------------------
@@ -360,8 +446,10 @@ def create_animation(
     # Per-panel artists
     edge_collections = []
     mobile_scatters = []
+    trail_scatters = []
     coord_scatters = []
-    task_scatters = {u: [] for u in UrgencyLevel}
+    task_pending_scatters = {u: [] for u in UrgencyLevel}
+    task_assigned_scatters = {u: [] for u in UrgencyLevel}
     metrics_texts = []
     time_texts = []
     delivery_scatters = []
@@ -376,13 +464,22 @@ def create_animation(
 
         _draw_zones(ax, config)
 
-        # Edges
-        lc = LineCollection([], colors=EDGE_COLOR, alpha=EDGE_ALPHA, linewidths=0.5)
+        # Edges (improved: thicker, darker)
+        lc = LineCollection([], colors=EDGE_COLOR, alpha=EDGE_ALPHA, linewidths=0.8)
         ax.add_collection(lc)
         edge_collections.append(lc)
 
-        # Mobile nodes
-        sc_mobile = ax.scatter([], [], s=25, c=color, alpha=0.7, zorder=3)
+        # Movement trails (fading dots behind mobile nodes)
+        sc_trail = ax.scatter(
+            [], [], s=8, c=color, alpha=0.15, zorder=2, edgecolors="none",
+        )
+        trail_scatters.append(sc_trail)
+
+        # Mobile nodes (size varies with buffer utilisation)
+        sc_mobile = ax.scatter(
+            [], [], s=NODE_SIZE_MIN, c=color, alpha=0.8, zorder=3,
+            edgecolors="white", linewidths=0.3,
+        )
         mobile_scatters.append(sc_mobile)
 
         # Coordination nodes
@@ -391,18 +488,19 @@ def create_animation(
         )
         coord_scatters.append(sc_coord)
 
-        # Task markers (one scatter per urgency level)
+        # Task markers — pending (bright) and assigned (dimmed)
         for urgency in UrgencyLevel:
-            sc_task = ax.scatter(
-                [],
-                [],
-                s=60,
-                c=URGENCY_COLORS[urgency],
-                marker="*",
-                alpha=0.6,
-                zorder=2,
+            sc_pending = ax.scatter(
+                [], [], s=60, c=URGENCY_COLORS[urgency], marker="*",
+                alpha=0.8, zorder=2,
             )
-            task_scatters[urgency].append(sc_task)
+            task_pending_scatters[urgency].append(sc_pending)
+
+            sc_assigned = ax.scatter(
+                [], [], s=40, c=URGENCY_COLORS[urgency], marker="*",
+                alpha=0.15, zorder=1,
+            )
+            task_assigned_scatters[urgency].append(sc_assigned)
 
         # Delivery flash markers
         sc_del = ax.scatter(
@@ -481,10 +579,33 @@ def create_animation(
             edge_collections[panel_idx].set_segments(segments)
             artists.append(edge_collections[panel_idx])
 
-            # -- Mobile nodes --
-            mx = [frame.node_positions[nid][0] for nid in mobile_ids if nid in frame.node_positions]
-            my = [frame.node_positions[nid][1] for nid in mobile_ids if nid in frame.node_positions]
-            mobile_scatters[panel_idx].set_offsets(np.column_stack([mx, my]) if mx else np.empty((0, 2)))
+            # -- Movement trails --
+            trail_pts = []
+            for nid in mobile_ids:
+                trail = frame.node_trails.get(nid, [])
+                # Skip the last point (that's the current position)
+                trail_pts.extend(trail[:-1] if len(trail) > 1 else [])
+            if trail_pts:
+                trail_scatters[panel_idx].set_offsets(np.array(trail_pts))
+            else:
+                trail_scatters[panel_idx].set_offsets(np.empty((0, 2)))
+            artists.append(trail_scatters[panel_idx])
+
+            # -- Mobile nodes (size scaled by buffer utilisation) --
+            m_positions = []
+            m_sizes = []
+            for nid in mobile_ids:
+                if nid in frame.node_positions:
+                    m_positions.append(frame.node_positions[nid])
+                    buf = frame.buffer_summary.get(nid)
+                    util = buf.utilisation if buf else 0.0
+                    size = NODE_SIZE_MIN + (NODE_SIZE_MAX - NODE_SIZE_MIN) * util
+                    m_sizes.append(size)
+            if m_positions:
+                mobile_scatters[panel_idx].set_offsets(np.array(m_positions))
+                mobile_scatters[panel_idx].set_sizes(m_sizes)
+            else:
+                mobile_scatters[panel_idx].set_offsets(np.empty((0, 2)))
             artists.append(mobile_scatters[panel_idx])
 
             # -- Coordination nodes --
@@ -493,28 +614,31 @@ def create_animation(
             coord_scatters[panel_idx].set_offsets(np.column_stack([cx, cy]) if cx else np.empty((0, 2)))
             artists.append(coord_scatters[panel_idx])
 
-            # -- Tasks by urgency --
+            # -- Tasks by urgency (pending = bright, assigned = dimmed) --
             for urgency in UrgencyLevel:
-                urg_tasks = [
-                    t for t in frame.tasks
-                    if t.urgency == urgency and t.status == "pending"
-                ]
-                if urg_tasks:
-                    tx = [t.x for t in urg_tasks]
-                    ty = [t.y for t in urg_tasks]
-                    task_scatters[urgency][panel_idx].set_offsets(np.column_stack([tx, ty]))
+                pending = [t for t in frame.tasks if t.urgency == urgency and t.status == "pending"]
+                assigned = [t for t in frame.tasks if t.urgency == urgency and t.status == "assigned"]
+
+                if pending:
+                    task_pending_scatters[urgency][panel_idx].set_offsets(
+                        np.array([(t.x, t.y) for t in pending])
+                    )
                 else:
-                    task_scatters[urgency][panel_idx].set_offsets(np.empty((0, 2)))
-                artists.append(task_scatters[urgency][panel_idx])
+                    task_pending_scatters[urgency][panel_idx].set_offsets(np.empty((0, 2)))
+                artists.append(task_pending_scatters[urgency][panel_idx])
+
+                if assigned:
+                    task_assigned_scatters[urgency][panel_idx].set_offsets(
+                        np.array([(t.x, t.y) for t in assigned])
+                    )
+                else:
+                    task_assigned_scatters[urgency][panel_idx].set_offsets(np.empty((0, 2)))
+                artists.append(task_assigned_scatters[urgency][panel_idx])
 
             # -- Delivery flash markers --
             if frame.recent_deliveries:
-                # Show flash around destination nodes of recently delivered messages
-                # We approximate by looking for nodes that received deliveries
-                # For simplicity, flash around all mobile nodes (the destinations are mobile)
                 del_positions = []
                 for mid in frame.recent_deliveries:
-                    # Find the task associated with this message delivery
                     for t in frame.tasks:
                         if t.assigned_to and t.status == "assigned":
                             pos = frame.node_positions.get(t.assigned_to)
@@ -522,21 +646,24 @@ def create_animation(
                                 del_positions.append(pos)
                                 break
                 if del_positions:
-                    dp = np.array(del_positions)
-                    delivery_scatters[panel_idx].set_offsets(dp)
+                    delivery_scatters[panel_idx].set_offsets(np.array(del_positions))
                 else:
                     delivery_scatters[panel_idx].set_offsets(np.empty((0, 2)))
             else:
                 delivery_scatters[panel_idx].set_offsets(np.empty((0, 2)))
             artists.append(delivery_scatters[panel_idx])
 
-            # -- Metrics text --
+            # -- Metrics text (enriched) --
             m = frame.metrics
             dr = m.messages_delivered / m.messages_created if m.messages_created > 0 else 0
             ar = m.tasks_assigned / m.tasks_created if m.tasks_created > 0 else 0
+            total_buf_msgs = sum(
+                b.message_count for b in frame.buffer_summary.values()
+            ) if frame.buffer_summary else 0
             metrics_texts[panel_idx].set_text(
                 f"Tasks: {m.tasks_assigned}/{m.tasks_created} ({ar:.0%})\n"
                 f"Msgs:  {m.messages_delivered}/{m.messages_created} ({dr:.0%})\n"
+                f"Edges: {frame.edge_count}  Buffers: {total_buf_msgs}\n"
                 f"Expired: {m.messages_expired}"
             )
             artists.append(metrics_texts[panel_idx])

@@ -741,7 +741,7 @@ class SimulationEngine:
     ) -> None:
         """Process list of TransmissionResult and update results."""
         for result in delivered:
-            if result.success:
+            if result.reason == "delivered":
                 msg = result.message
                 results.messages_delivered += 1
 

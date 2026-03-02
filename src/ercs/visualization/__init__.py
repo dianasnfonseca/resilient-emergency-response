@@ -19,9 +19,18 @@ from ercs.visualization.plots import (
 )
 from ercs.visualization.animation import (
     AnimationEngine,
+    ForwardingEntry,
     FrameData,
     create_animation,
     run_paired_simulation,
+)
+from ercs.visualization.diagnostics import (
+    find_message_journeys,
+    plot_all_message_paths,
+    plot_message_journey,
+    plot_predictability_evolution,
+    plot_predictability_graph,
+    plot_predictability_heatmap,
 )
 
 __all__ = [
@@ -42,7 +51,15 @@ __all__ = [
     "save_figure",
     # Animation
     "AnimationEngine",
+    "ForwardingEntry",
     "FrameData",
     "create_animation",
     "run_paired_simulation",
+    # Diagnostics
+    "find_message_journeys",
+    "plot_all_message_paths",
+    "plot_message_journey",
+    "plot_predictability_evolution",
+    "plot_predictability_graph",
+    "plot_predictability_heatmap",
 ]
