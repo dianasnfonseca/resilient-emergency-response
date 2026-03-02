@@ -291,6 +291,9 @@ class SimulationEngine:
         self._scenario: Scenario | None = None
         self._mobility: MobilityManager | None = None
 
+        # Link availability cache (deterministic per node pair per run)
+        self._link_availability: dict[tuple[str, str], bool] = {}
+
         # Results tracking
         self._events: list[SimulationEvent] = []
         self._task_message_map: dict[str, str] = {}  # task_id -> message_id
@@ -408,6 +411,7 @@ class SimulationEngine:
         self._events.clear()
         self._task_message_map.clear()
         self._message_creation_times.clear()
+        self._link_availability.clear()
 
     def _initialize_mobility(self) -> None:
         """
@@ -658,6 +662,30 @@ class SimulationEngine:
                 },
             )
 
+    def _is_link_available(self, node_a: str, node_b: str) -> bool:
+        """
+        Determine if a communication link exists between two nodes.
+
+        Models infrastructure damage (Karaman et al., 2026) where some links
+        are unavailable due to base station failures. Uses deterministic hash
+        so the same node pair has consistent link status within a run.
+
+        At connectivity_level=0.75, ~75% of potential links exist.
+        At connectivity_level=0.20, only ~20% exist.
+        """
+        pair_key = tuple(sorted([node_a, node_b]))
+
+        if pair_key in self._link_availability:
+            return self._link_availability[pair_key]
+
+        # Deterministic: hash node pair + run seed
+        pair_hash = hash((pair_key, self.random_seed)) % 10000
+        threshold = int(self.connectivity_level * 10000)
+        available = pair_hash < threshold
+
+        self._link_availability[pair_key] = available
+        return available
+
     def _handle_mobility_update(
         self,
         event: SimulationEvent,
@@ -692,15 +720,18 @@ class SimulationEngine:
         new_connections = self._topology.update_edges_from_positions()
         
         # Step 4: Process new encounters for PRoPHET
+        # Apply connectivity filter: infrastructure damage means some links
+        # don't exist (Karaman et al., 2026)
         for node_a, node_b in new_connections:
-            # Update PRoPHET predictability
+            if not self._is_link_available(node_a, node_b):
+                continue
+
             delivered = self._communication.process_encounter(
                 node_a=node_a,
                 node_b=node_b,
                 current_time=event.timestamp,
             )
-            
-            # Check for delivered messages
+
             self._process_delivered_messages(delivered, event.timestamp, results)
 
     def _handle_node_encounters(
@@ -709,28 +740,25 @@ class SimulationEngine:
         results: SimulationResults,
     ) -> None:
         """
-        Handle node encounter events based on actual connectivity.
-        
-        With mobility enabled, we use the edges from the topology graph
-        which are dynamically updated based on node positions.
+        Handle node encounter events on existing edges.
+
+        Uses the same deterministic link availability filter as mobility
+        updates — infrastructure damage (Karaman et al., 2026) determines
+        which links exist, not per-transmission probability.
         """
-        # Get connected node pairs from topology (already updated by mobility)
         edges = list(self._topology.graph.edges())
 
-        # Process encounters based on connectivity level
-        # This simulates probabilistic link failures on top of physical proximity
         for node_a, node_b in edges:
-            # Simulate probabilistic encounters
-            if self._rng.random() < self.connectivity_level:
-                # Process encounter in communication layer
-                delivered = self._communication.process_encounter(
-                    node_a=node_a,
-                    node_b=node_b,
-                    current_time=event.timestamp,
-                )
+            if not self._is_link_available(node_a, node_b):
+                continue
 
-                # Check for delivered messages
-                self._process_delivered_messages(delivered, event.timestamp, results)
+            delivered = self._communication.process_encounter(
+                node_a=node_a,
+                node_b=node_b,
+                current_time=event.timestamp,
+            )
+
+            self._process_delivered_messages(delivered, event.timestamp, results)
 
         # Expire old messages
         expired = self._communication.expire_all_messages(event.timestamp)

@@ -23,7 +23,8 @@
       "Bash(do for seed in 42 43 44 45 46)",
       "Bash(do python scripts/diagnose_encounters.py --duration 6000 --connectivity $conn --algorithm $algo --seed $seed)",
       "Bash(echo \"[$algo conn=$conn seed=$seed]\")",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(python3 -c \":*)"
     ],
     "additionalDirectories": [
       "/Users/dianafonseca/resilient-emergency-response/outputs/figures"
