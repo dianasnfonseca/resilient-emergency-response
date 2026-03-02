@@ -48,6 +48,7 @@ Phase 1  NETWORK             topology.py + mobility.py — 50 nodes, edges, move
 | `app/dashboard.py` | 6 | Streamlit interactive dashboard |
 | `notebooks/experiment_report.ipynb` | 6 | Jupyter notebook for static analysis |
 | `scripts/run_animation.py` | — | CLI to launch the animation |
+| `tests/conftest.py` | — | Centralised test constants (mirrors spec defaults) |
 | `configs/default.yaml` | — | Default experiment configuration |
 
 ---
@@ -66,25 +67,33 @@ _initialize_components():
                                         Edges between nodes within 100m radio range
   2. CommunicationLayer()             → Per-node message buffers (5 MB each)
                                         Delivery predictability matrix (all zeros)
-  3. _initialize_coordination_         → Seed P(coord, mobile) = 0.75 for all pairs
-     predictability()                   (simulates pre-established backhaul)
+  3. _initialize_coordination_         → Seed P(coord, mobile) = P_init for all pairs
+     predictability()                   Coordination nodes have backhaul infrastructure,
+                                        so they start with nonzero predictability to
+                                        every mobile node. Without this, the Adaptive
+                                        algorithm could never assign tasks (P = 0 everywhere).
   4. create_coordinator()             → AdaptiveCoordinator or BaselineCoordinator
      CoordinationManager()              Manages pending task queue
-  5. ScenarioGenerator.generate()     → ~1440 tasks via Poisson process (2/min, 12h)
+  5. ScenarioGenerator.generate()     → ~200 tasks via Poisson process (2/min, ~100 min)
      manager.add_tasks()                All tasks queued for future coordination cycles
   6. _initialize_mobility()           → Random Waypoint states for 48 mobile nodes
+                                        Each starts at its topology position in the
+                                        incident zone and picks a random destination.
 ```
 
 ### 3.2 Event Scheduling
 
-All events are pre-scheduled into a priority queue sorted by timestamp:
+All events are pre-scheduled into a priority queue sorted by timestamp.
+The first `COORDINATION_CYCLE` fires at t=0 (assigns any tasks created at
+t=0), then every 30 minutes thereafter. `TASK_CREATED` events are drawn from
+the Poisson process and land at random times throughout the simulation.
 
-| Event Type | Frequency | Count (12h run) |
+| Event Type | Frequency | Count (~100 min run) |
 |---|---|---|
-| `MOBILITY_UPDATE` | Every 1 second | ~43,200 |
-| `NODE_ENCOUNTER` | Every 10 seconds | ~4,320 |
-| `TASK_CREATED` | Poisson (~2/min) | ~1,440 |
-| `COORDINATION_CYCLE` | Every 30 minutes | 24 |
+| `MOBILITY_UPDATE` | Every 1 second | ~6,000 |
+| `NODE_ENCOUNTER` | Every 10 seconds | ~600 |
+| `TASK_CREATED` | Poisson (~2/min) | ~200 |
+| `COORDINATION_CYCLE` | Every 30 minutes | 3–4 |
 
 ### 3.3 Main Loop
 
@@ -125,45 +134,58 @@ For each assignment:
   └─ Message now waits for encounters to be forwarded/delivered
 ```
 
-#### MOBILITY_UPDATE (every 1 second)
+#### MOBILITY_UPDATE (every 1 second) — physical movement
 
-This is the main driver of the simulation dynamics:
+This handles node movement and detects **new** physical connections:
 
 ```
 MobilityManager.step()
   └─ Each mobile node moves toward its Random Waypoint destination
+     (speed 1–20 m/s, pause 0–30s at each waypoint)
      │
      ▼
 topology.update_node_position() for each moved node
 topology.update_edges_from_positions()
-  └─ Detects NEW connections (nodes just came within 100m of each other)
+  └─ Detects NEW connections (nodes just came within 100m)
      │
      ▼
-For each new connection:
+For each new connection (deterministic — no connectivity filter):
   communication_layer.process_encounter(node_a, node_b)
-    ├─ Age predictabilities (time decay: P *= 0.98^k)
-    ├─ Update P(a,b) — encounter equation: P += (1-P) × 0.75
-    ├─ Update P(a,c) — transitivity through b
+    ├─ Age predictabilities: P *= γ^k  where k = elapsed / 30s
+    ├─ Update P(a,b) — encounter:    P(a,b) += (1 − P(a,b)) × P_init
+    ├─ Update P(a,c) — transitivity: P(a,c) += P(a,b) × P(b,c) × β
     └─ Exchange messages:
         ├─ Direct delivery if destination node present → MESSAGE_DELIVERED
         └─ Forward copy if other node has higher P to destination
 ```
 
-#### NODE_ENCOUNTER (every 10 seconds)
+New connections always trigger an encounter — they represent two radios
+that just entered range of each other. The connectivity degradation filter
+does not apply here; it only applies to sustained links (see below).
+
+#### NODE_ENCOUNTER (every 10 seconds) — sustained link reliability
+
+This models **ongoing communication** over existing edges, subject to
+infrastructure degradation (Karaman et al., 2026):
 
 ```
 For each existing edge in topology:
   └─ Probabilistic check: random() < connectivity_level
-     ├─ 0.75 → 75% of edges succeed (mild degradation)
-     ├─ 0.40 → 40% succeed (moderate, post-earthquake)
-     └─ 0.20 → 20% succeed (severe, early disaster)
+     ├─ 0.75 → 75% of attempts succeed (mild degradation)
+     ├─ 0.40 → 40% succeed (moderate, 24–48h post-earthquake)
+     └─ 0.20 → 20% succeed (severe, early disaster phase)
      │
      ▼ (if encounter succeeds)
   communication_layer.process_encounter()
-    └─ Same cascade: predictability update → message exchange → delivery
+    └─ Same cascade: aging → predictability update → message exchange
 
 Also: expire_all_messages() removes messages past their 300-minute TTL
 ```
+
+Together, MOBILITY_UPDATE and NODE_ENCOUNTER create two pathways for
+message delivery: new connections as nodes physically move into range,
+and repeated communication attempts over existing links filtered by the
+connectivity level.
 
 ### 3.5 The Critical Path (how a task assignment actually reaches a responder)
 
@@ -184,9 +206,45 @@ MESSAGE_DELIVERED recorded in results
 ```
 
 The connectivity level controls how hard the delivery step is. At 75%, messages
-flow relatively easily. At 20%, many messages expire (TTL = 300 min) before they
-can reach their destination — this is where Adaptive should outperform Baseline
-because it avoids assigning tasks to responders it cannot reach (P > 0 filter).
+flow relatively easily. At 20%, many messages expire (TTL = 300 min = 18,000s)
+before they can reach their destination — this is where Adaptive should
+outperform Baseline because it avoids assigning tasks to responders it cannot
+reach (P > 0 filter).
+
+### 3.6 PRoPHET Predictability Equations (Kumar et al., 2023)
+
+Three equations govern the delivery predictability matrix `P`:
+
+**Encounter** — when nodes A and B come into contact:
+
+```
+P(A,B) = P(A,B)_old + (1 − P(A,B)_old) × P_init
+```
+
+Predictability increases toward 1.0 with each encounter. Nodes that meet
+frequently develop high mutual predictability.
+
+**Aging** — time decay applied before each encounter:
+
+```
+P(A,B) = P(A,B)_old × γ^k    where k = elapsed_seconds / 30
+```
+
+Predictability decays over time if nodes do not meet. With γ = 0.98 and a
+30-second aging interval, predictability halves after ~34 intervals (~17 min).
+
+**Transitivity** — when A encounters B, update A's predictability to C
+through B:
+
+```
+P(A,C) = P(A,C)_old + P(A,B) × P(B,C) × β
+```
+
+If B frequently meets C, then A encountering B indirectly improves A's
+path to C. This enables multi-hop forwarding decisions.
+
+These equations are applied inside `process_encounter()`, which is called
+by both MOBILITY_UPDATE (new connections) and NODE_ENCOUNTER (sustained links).
 
 ---
 
@@ -246,7 +304,7 @@ for statistical inference (Law, 2015).
 | Total nodes | 50 | 2 coordination + 48 mobile |
 | Simulation area | 3000 × 1500 m | Full operational theatre |
 | Incident zone | 700 × 600 m | Where tasks appear, responders start |
-| Coordination zone | 50 × 50 m | Fixed infrastructure, near (2900, 1400) |
+| Coordination zone | 50 × 50 m | Fixed infrastructure, origin (2900, 725) |
 | Radio range | 100 m | Nodes must be this close to communicate |
 | Buffer size | 5 MB per node | Message storage capacity |
 | Message size | 512 KB | Per coordination message |
@@ -261,6 +319,7 @@ for statistical inference (Law, 2015).
 | Gamma (aging) | 0.98 | Time decay factor |
 | Message TTL | 300 minutes | Expiry time |
 | Transmit speed | 2 Mbps | Transfer rate between nodes |
+| Aging interval | 30 seconds | Time unit for γ^k decay |
 | Drop policy | DROP_OLDEST | When buffer is full |
 
 ### Scenario (Phase 3)
@@ -268,7 +327,7 @@ for statistical inference (Law, 2015).
 | Parameter | Default | Notes |
 |---|---|---|
 | Task arrival rate | 2 per minute | Poisson process |
-| Simulation duration | 43,200 seconds | 12 hours |
+| Simulation duration | 6,000 seconds | ~100 minutes (Ullah & Qayyum, 2022) |
 | Urgency distribution | 20% H, 50% M, 30% L | Sampled per task |
 | Runs per config | 30 | For statistical significance |
 
@@ -368,66 +427,23 @@ python scripts/run_experiment.py --config configs/default.yaml --dry-run
  0                  700                                               3000
  ┌───────────────────┬────────────────────────────────────────────────┐
  │                   │                                                │ 1500
- │   INCIDENT ZONE   │                                                │
- │   (700 × 600m)    │               SIMULATION AREA                  │
- │   Tasks appear     │               (3000 × 1500m)                  │
- │   here.            │                                                │
- │   Responders       │               Mobile nodes traverse           │
- │   start here.      │               the full area via               │
- │                   │               Random Waypoint.                 │
- ├───────────────────┘                                                │
+ │                   │                                                │
+ │                   │               SIMULATION AREA                  │
+ │   INCIDENT ZONE   │               (3000 × 1500m)                  │
+ │   (700 × 600m)    │                                                │
+ │   y: 450–1050     │               Mobile nodes traverse           │
+ │   Tasks appear     │               the full area via     ┌──────┐  │
+ │   here.            │               Random Waypoint.      │COORD │  │ ~y=750
+ │   Responders       │                                     │ZONE  │  │
+ │   start here.      │                                     │50×50 │  │
+ │                   │                                     └──────┘  │
+ ├───────────────────┘                                   (2900, 725)  │
  │                                                                    │
- │                                                      ┌──────┐      │
- │                                                      │COORD │      │
- │                                                      │ZONE  │      │
- │                                                      │50×50 │      │
- │                                                      └──────┘      │
- │                                                    ~(2900, 1400)   │
+ │                                                                    │
  └────────────────────────────────────────────────────────────────────┘
  Radio range: 100m — nodes must be this close to form an edge
 ```
 
-Coordination nodes are ~2200m from the incident zone. With a 100m radio range,
-messages must relay through intermediate mobile nodes to reach responders.
-
----
-
-## 10. Known Limitations
-
-### 10.1 No Task Execution Modelling
-
-The simulation tracks task assignment and message delivery but does not model
-task execution. There is no `TASK_COMPLETED` event, no responder "busy" state,
-and responders can receive unlimited simultaneous assignments. Assignment rates
-may therefore be higher than in a real system with capacity constraints.
-
-### 10.2 Coordination Nodes are Geographically Isolated
-
-Coordination nodes are positioned at ~(2900, 1400), roughly 2200m from the
-incident zone at (0–700, 450–1050). With a 100m radio range, no direct link
-can ever exist between coordination and incident zones. All message delivery
-depends on mobile nodes physically traversing the gap via Random Waypoint
-mobility. This is by design (simulating degraded infrastructure) but means
-delivery times include substantial physical transit time.
-
-### 10.3 No Warm-up Period
-
-`warmup_period_seconds` is set to 0 in the default configuration. This means
-results include the initial transient phase when PRoPHET predictability values
-are still building up from zero (or from the seeded 0.75 for coord→mobile pairs).
-Early coordination cycles may behave differently from steady-state cycles.
-
-### 10.4 All Tasks Assigned in First Eligible Cycle
-
-Because responders are never "busy", all pending tasks at each 30-minute
-coordination cycle are assigned immediately. The Adaptive algorithm may leave
-some unassigned if P = 0 for all responders (no reachable path), but the
-Baseline algorithm always assigns everything. Most response times cluster
-around multiples of 1800 seconds (the cycle interval).
-
-### 10.5 Encounter Probability Applies to All Edges Equally
-
-The `connectivity_level` parameter (0.75, 0.40, 0.20) is applied uniformly
-to all topology edges during `NODE_ENCOUNTER` events — `random() < connectivity_level`.
-There is no spatial variation in connectivity (e.g., closer to infrastructure = better
-signal). All links degrade equally.
+Both zones are vertically centred at ~y=750. Coordination nodes are ~2200m
+horizontally from the incident zone. With a 100m radio range, messages must
+relay through intermediate mobile nodes to reach responders.

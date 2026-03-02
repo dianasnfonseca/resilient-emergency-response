@@ -55,7 +55,7 @@ communication:
     gamma: 0.98
   message_ttl_seconds: 18000  # 300 minutes
   transmit_speed_bps: 2000000  # 2 Mbps
-  update_interval_seconds: 0.1
+  update_interval_seconds: 30.0  # Aging time unit (γ^k where k = elapsed/30)
   buffer_drop_policy: drop_oldest
 
 # Phase 3: Scenario Generation
