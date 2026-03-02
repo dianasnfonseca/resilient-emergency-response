@@ -40,10 +40,6 @@ class TaskStatus(str, Enum):
 
     PENDING = "pending"  # Awaiting assignment
     ASSIGNED = "assigned"  # Assigned to responder
-    IN_PROGRESS = "in_progress"  # Being executed
-    COMPLETED = "completed"  # Successfully completed
-    FAILED = "failed"  # Failed (timeout, etc.)
-    CANCELLED = "cancelled"  # Cancelled
 
 
 @dataclass
@@ -52,8 +48,8 @@ class Task:
     Represents an emergency response task requiring coordination.
 
     Tasks are generated at specific times during simulation and require
-    assignment to mobile responders for completion. Each task has an
-    urgency level that may influence prioritisation.
+    assignment to mobile responders. Each task has an urgency level
+    that may influence prioritisation.
 
     Attributes:
         task_id: Unique identifier for the task
@@ -62,11 +58,9 @@ class Task:
         target_location_x: X coordinate of task location (metres)
         target_location_y: Y coordinate of task location (metres)
         urgency: Task urgency level (H/M/L)
-        estimated_duration: Estimated completion time (seconds)
         status: Current task status
         assigned_to: Node ID of assigned responder (if assigned)
         assignment_time: Time when task was assigned (if assigned)
-        completion_time: Time when task was completed (if completed)
     """
 
     task_id: str
@@ -75,11 +69,9 @@ class Task:
     target_location_x: float
     target_location_y: float
     urgency: UrgencyLevel
-    estimated_duration: float = 300.0  # Default 5 minutes
     status: TaskStatus = TaskStatus.PENDING
     assigned_to: str | None = None
     assignment_time: float | None = None
-    completion_time: float | None = None
 
     def assign(self, responder_id: str, current_time: float) -> None:
         """Assign this task to a responder."""
@@ -87,35 +79,11 @@ class Task:
         self.assignment_time = current_time
         self.status = TaskStatus.ASSIGNED
 
-    def start(self) -> None:
-        """Mark task as in progress."""
-        self.status = TaskStatus.IN_PROGRESS
-
-    def complete(self, current_time: float) -> None:
-        """Mark task as completed."""
-        self.completion_time = current_time
-        self.status = TaskStatus.COMPLETED
-
-    def fail(self) -> None:
-        """Mark task as failed."""
-        self.status = TaskStatus.FAILED
-
-    def cancel(self) -> None:
-        """Cancel the task."""
-        self.status = TaskStatus.CANCELLED
-
     @property
     def response_time(self) -> float | None:
         """Calculate response time (assignment - creation) if assigned."""
         if self.assignment_time is not None:
             return self.assignment_time - self.creation_time
-        return None
-
-    @property
-    def completion_duration(self) -> float | None:
-        """Calculate total duration (completion - creation) if completed."""
-        if self.completion_time is not None:
-            return self.completion_time - self.creation_time
         return None
 
     def age(self, current_time: float) -> float:
@@ -125,10 +93,6 @@ class Task:
     def is_pending(self) -> bool:
         """Check if task is still pending assignment."""
         return self.status == TaskStatus.PENDING
-
-    def is_active(self) -> bool:
-        """Check if task is assigned or in progress."""
-        return self.status in (TaskStatus.ASSIGNED, TaskStatus.IN_PROGRESS)
 
 
 @dataclass
@@ -385,9 +349,6 @@ class ScenarioGenerator:
         # Assign urgency level based on distribution
         urgency = self._select_urgency()
 
-        # Generate estimated duration (varies by urgency)
-        estimated_duration = self._generate_duration(urgency)
-
         return Task(
             task_id=task_id,
             creation_time=creation_time,
@@ -395,7 +356,6 @@ class ScenarioGenerator:
             target_location_x=target_x,
             target_location_y=target_y,
             urgency=urgency,
-            estimated_duration=estimated_duration,
         )
 
     def _select_urgency(self) -> UrgencyLevel:
@@ -415,31 +375,6 @@ class ScenarioGenerator:
             p=self._urgency_probs,
         )
         return self._urgency_levels[idx]
-
-    def _generate_duration(self, urgency: UrgencyLevel) -> float:
-        """
-        Generate estimated task duration based on urgency.
-
-        Higher urgency tasks tend to require faster response but
-        may have similar execution durations.
-
-        Args:
-            urgency: Task urgency level
-
-        Returns:
-            Estimated duration in seconds
-        """
-        # Base durations by urgency (design decision)
-        base_durations = {
-            UrgencyLevel.HIGH: 180.0,  # 3 minutes - quick response needed
-            UrgencyLevel.MEDIUM: 300.0,  # 5 minutes - standard
-            UrgencyLevel.LOW: 420.0,  # 7 minutes - can be longer
-        }
-
-        base = base_durations[urgency]
-        # Add some variation (±30%)
-        variation = self._rng.uniform(0.7, 1.3)
-        return base * variation
 
     def generate_batch(
         self,

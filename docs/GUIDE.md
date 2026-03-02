@@ -394,24 +394,12 @@ messages must relay through intermediate mobile nodes to reach responders.
 
 ## 10. Known Limitations
 
-### 10.1 Task Duration is Never Used (Critical)
+### 10.1 No Task Execution Modelling
 
-The `estimated_duration` field on `Task` is generated based on urgency level
-(HIGH = 3 min, MEDIUM = 5 min, LOW = 7 min, with +/-30% variation) but is
-**never consumed by the simulation engine**. There is:
-
-- No `TASK_STARTED` or `TASK_COMPLETED` event type
-- No responder "busy" state — responders can receive unlimited simultaneous assignments
-- No task execution modelling — once assigned, a task's only remaining lifecycle is
-  whether its assignment *message* gets delivered
-
-**Impact**: Assignment rates may be artificially high because there is no capacity
-constraint. Both algorithms see all 48 responders as available for every task.
-The differentiation between Adaptive and Baseline may be weaker than it should be,
-since resource contention (responders being occupied) is not modelled.
-
-The `Task` class has `start()`, `complete()`, and `fail()` methods, and a
-`completion_duration` property — they exist but are never called.
+The simulation tracks task assignment and message delivery but does not model
+task execution. There is no `TASK_COMPLETED` event, no responder "busy" state,
+and responders can receive unlimited simultaneous assignments. Assignment rates
+may therefore be higher than in a real system with capacity constraints.
 
 ### 10.2 Coordination Nodes are Geographically Isolated
 

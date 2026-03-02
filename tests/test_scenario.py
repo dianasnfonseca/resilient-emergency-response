@@ -52,7 +52,6 @@ class TestTask:
             target_location_x=350.0,
             target_location_y=750.0,
             urgency=UrgencyLevel.HIGH,
-            estimated_duration=180.0,
         )
 
         assert task.task_id == "task_0001"
@@ -61,7 +60,6 @@ class TestTask:
         assert task.target_location_x == 350.0
         assert task.target_location_y == 750.0
         assert task.urgency == UrgencyLevel.HIGH
-        assert task.estimated_duration == 180.0
         assert task.status == TaskStatus.PENDING
         assert task.assigned_to is None
 
@@ -82,24 +80,6 @@ class TestTask:
         assert task.assigned_to == "mobile_5"
         assert task.assignment_time == 50.0
 
-    def test_task_completion(self):
-        """Test task completion."""
-        task = Task(
-            task_id="task_0001",
-            creation_time=0.0,
-            source_node="coord_0",
-            target_location_x=100.0,
-            target_location_y=100.0,
-            urgency=UrgencyLevel.LOW,
-        )
-
-        task.assign("mobile_3", current_time=30.0)
-        task.start()
-        task.complete(current_time=180.0)
-
-        assert task.status == TaskStatus.COMPLETED
-        assert task.completion_time == 180.0
-
     def test_response_time_calculation(self):
         """Test response time calculation (assignment - creation)."""
         task = Task(
@@ -117,25 +97,6 @@ class TestTask:
         # After assignment
         task.assign("mobile_1", current_time=150.0)
         assert task.response_time == 50.0  # 150 - 100
-
-    def test_completion_duration(self):
-        """Test completion duration calculation."""
-        task = Task(
-            task_id="task_0001",
-            creation_time=0.0,
-            source_node="coord_0",
-            target_location_x=100.0,
-            target_location_y=100.0,
-            urgency=UrgencyLevel.MEDIUM,
-        )
-
-        # Before completion
-        assert task.completion_duration is None
-
-        # After completion
-        task.assign("mobile_1", current_time=30.0)
-        task.complete(current_time=300.0)
-        assert task.completion_duration == 300.0
 
     def test_task_age(self):
         """Test task age calculation."""
@@ -167,56 +128,6 @@ class TestTask:
 
         task.assign("mobile_1", current_time=10.0)
         assert task.is_pending() is False
-
-    def test_is_active(self):
-        """Test active status check (assigned or in progress)."""
-        task = Task(
-            task_id="task_0001",
-            creation_time=0.0,
-            source_node="coord_0",
-            target_location_x=100.0,
-            target_location_y=100.0,
-            urgency=UrgencyLevel.HIGH,
-        )
-
-        assert task.is_active() is False
-
-        task.assign("mobile_1", current_time=10.0)
-        assert task.is_active() is True
-
-        task.start()
-        assert task.is_active() is True
-
-        task.complete(current_time=100.0)
-        assert task.is_active() is False
-
-    def test_task_failure(self):
-        """Test task failure status."""
-        task = Task(
-            task_id="task_0001",
-            creation_time=0.0,
-            source_node="coord_0",
-            target_location_x=100.0,
-            target_location_y=100.0,
-            urgency=UrgencyLevel.MEDIUM,
-        )
-
-        task.fail()
-        assert task.status == TaskStatus.FAILED
-
-    def test_task_cancellation(self):
-        """Test task cancellation."""
-        task = Task(
-            task_id="task_0001",
-            creation_time=0.0,
-            source_node="coord_0",
-            target_location_x=100.0,
-            target_location_y=100.0,
-            urgency=UrgencyLevel.LOW,
-        )
-
-        task.cancel()
-        assert task.status == TaskStatus.CANCELLED
 
 
 # =============================================================================
