@@ -295,6 +295,11 @@ class SimulationEngine:
         # Link availability cache (deterministic per node pair per run)
         self._link_availability: dict[tuple[str, str], bool] = {}
 
+        # Active links: tracks currently established connections so that
+        # PRoPHET encounter updates fire only on connection-up events,
+        # not on every periodic encounter check (RFC 6693).
+        self._active_links: set[tuple[str, str]] = set()
+
         # Results tracking
         self._events: list[SimulationEvent] = []
         self._task_message_map: dict[str, str] = {}  # task_id -> message_id
@@ -408,6 +413,7 @@ class SimulationEngine:
         self._task_message_map.clear()
         self._message_creation_times.clear()
         self._link_availability.clear()
+        self._active_links.clear()
 
     def _initialize_mobility(self) -> None:
         """
@@ -731,18 +737,30 @@ class SimulationEngine:
         # Step 3: Recalculate edges and find new connections
         new_connections = self._topology.update_edges_from_positions()
         
-        # Step 4: Process new encounters for PRoPHET
+        # Step 4: Process new encounters for PRoPHET (connection-up only)
         # Apply connectivity filter: infrastructure damage means some links
         # don't exist (Karaman et al., 2026)
         for node_a, node_b in new_connections:
             if not self._is_link_available(node_a, node_b):
                 continue
 
-            delivered = self._communication.process_encounter(
-                node_a=node_a,
-                node_b=node_b,
-                current_time=event.timestamp,
-            )
+            link_key = (min(node_a, node_b), max(node_a, node_b))
+
+            if link_key not in self._active_links:
+                # Connection-up: full PRoPHET encounter + transitivity
+                self._active_links.add(link_key)
+                delivered = self._communication.process_encounter(
+                    node_a=node_a,
+                    node_b=node_b,
+                    current_time=event.timestamp,
+                )
+            else:
+                # Already active — transfer messages only
+                delivered = self._communication.transfer_messages(
+                    node_a=node_a,
+                    node_b=node_b,
+                    current_time=event.timestamp,
+                )
 
             self._process_delivered_messages(delivered, event.timestamp, results)
 
@@ -752,25 +770,49 @@ class SimulationEngine:
         results: SimulationResults,
     ) -> None:
         """
-        Handle node encounter events on existing edges.
+        Handle node encounter events — connection-up only for PRoPHET.
 
-        Uses the same deterministic link availability filter as mobility
-        updates — infrastructure damage (Karaman et al., 2026) determines
-        which links exist, not per-transmission probability.
+        RFC 6693 (Lindgren et al., 2012): PRoPHET encounter updates (the
+        P(a,b) equation and transitivity) fire only when a link is first
+        established ("connection-up"), not repeatedly while nodes remain
+        in range.  Message transfers still occur on all active links at
+        each interval.
+
+        Uses the deterministic link availability filter — infrastructure
+        damage (Karaman et al., 2026) determines which links exist.
         """
-        edges = list(self._topology.graph.edges())
-
-        for node_a, node_b in edges:
+        # Build the current set of link-available edges
+        current_links: set[tuple[str, str]] = set()
+        for node_a, node_b in self._topology.graph.edges():
             if not self._is_link_available(node_a, node_b):
                 continue
+            link_key = (min(node_a, node_b), max(node_a, node_b))
+            current_links.add(link_key)
 
+        # New links: connection-up → full PRoPHET encounter + transitivity
+        new_links = current_links - self._active_links
+
+        for node_a, node_b in new_links:
             delivered = self._communication.process_encounter(
                 node_a=node_a,
                 node_b=node_b,
                 current_time=event.timestamp,
             )
-
             self._process_delivered_messages(delivered, event.timestamp, results)
+
+        # Existing links: transfer messages only (no encounter/transitivity)
+        existing_links = current_links & self._active_links
+
+        for node_a, node_b in existing_links:
+            delivered = self._communication.transfer_messages(
+                node_a=node_a,
+                node_b=node_b,
+                current_time=event.timestamp,
+            )
+            self._process_delivered_messages(delivered, event.timestamp, results)
+
+        # Update active links for next cycle
+        self._active_links = current_links
 
         # Expire old messages
         expired = self._communication.expire_all_messages(event.timestamp)

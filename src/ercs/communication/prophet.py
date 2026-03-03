@@ -885,6 +885,45 @@ class CommunicationLayer:
                     reason="buffer_full",
                 )
 
+    def transfer_messages(
+        self,
+        node_a: str,
+        node_b: str,
+        current_time: float,
+    ) -> list[TransmissionResult]:
+        """
+        Transfer messages between two nodes on an active link.
+
+        Unlike process_encounter(), this does NOT update predictability
+        (encounter equation or transitivity).  It only ages predictabilities
+        and exchanges messages.  Use this for sustained contacts where the
+        connection-up event has already been processed.
+
+        RFC 6693 (Lindgren et al., 2012): encounter updates happen at
+        contact establishment, not continuously during sustained contact.
+
+        Args:
+            node_a: First node in active link
+            node_b: Second node in active link
+            current_time: Current simulation time
+
+        Returns:
+            List of transmission results from this transfer
+        """
+        results = []
+
+        # Age predictabilities (idempotent — no-op if already aged this period)
+        self.predictability.age_predictabilities(node_a, current_time)
+        self.predictability.age_predictabilities(node_b, current_time)
+
+        # Exchange messages A -> B
+        results.extend(self._transfer_messages(node_a, node_b, current_time))
+
+        # Exchange messages B -> A
+        results.extend(self._transfer_messages(node_b, node_a, current_time))
+
+        return results
+
     def _calculate_transmission_time(self, size_bytes: int) -> float:
         """
         Calculate time to transmit a message.

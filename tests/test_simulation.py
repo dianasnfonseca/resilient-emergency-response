@@ -620,6 +620,172 @@ class TestPhase5Parameters:
 
 
 # =============================================================================
+# Test Connection-Up Encounter Semantics
+# =============================================================================
+
+
+class TestConnectionUpEncounters:
+    """Tests that PRoPHET encounter updates fire only on connection-up.
+
+    RFC 6693 (Lindgren et al., 2012): predictability updates should occur
+    when two nodes first meet, not repeatedly during sustained contact.
+    """
+
+    def test_transfer_messages_does_not_update_predictability(self):
+        """transfer_messages should NOT increase P (only age)."""
+        from ercs.communication.prophet import CommunicationLayer
+        from ercs.config.parameters import CommunicationParameters
+
+        params = NetworkParameters()
+        comm = CommunicationLayer(
+            comm_params=CommunicationParameters(),
+            network_params=params,
+            node_ids=["A", "B"],
+        )
+
+        # Set a known P value
+        comm.predictability.set_predictability("A", "B", 0.50)
+        comm.predictability.set_predictability("B", "A", 0.50)
+
+        # transfer_messages should NOT apply encounter equation
+        comm.transfer_messages("A", "B", current_time=0.0)
+
+        # P should not have increased (encounter eq would push it to ~0.875)
+        assert comm.get_delivery_predictability("A", "B") <= 0.50
+        assert comm.get_delivery_predictability("B", "A") <= 0.50
+
+    def test_process_encounter_updates_predictability(self):
+        """process_encounter should increase P via encounter equation."""
+        from ercs.communication.prophet import CommunicationLayer
+        from ercs.config.parameters import CommunicationParameters
+
+        params = NetworkParameters()
+        comm = CommunicationLayer(
+            comm_params=CommunicationParameters(),
+            network_params=params,
+            node_ids=["A", "B"],
+        )
+
+        # Initially P = 0
+        assert comm.get_delivery_predictability("A", "B") == 0.0
+
+        # process_encounter should set P = P_init = 0.75
+        comm.process_encounter("A", "B", current_time=0.0)
+
+        assert comm.get_delivery_predictability("A", "B") == pytest.approx(0.75)
+
+    def test_sustained_contact_does_not_re_trigger_encounter(self):
+        """Engine should not re-trigger PRoPHET encounter for sustained links."""
+        short_config = SimulationConfig(
+            scenario=ScenarioParameters(
+                simulation_duration_seconds=100,
+                message_rate_per_minute=0.5,
+                warmup_period_seconds=0,
+            ),
+            coordination=CoordinationParameters(
+                update_interval_seconds=200,  # No coordination during test
+            ),
+        )
+
+        engine = SimulationEngine(
+            config=short_config,
+            algorithm_type=AlgorithmType.ADAPTIVE,
+            connectivity_level=1.0,  # All links available
+            random_seed=42,
+        )
+
+        # Initialize components
+        engine._initialize_components()
+
+        # Get two nodes that are neighbours (within range)
+        edges = list(engine._topology.graph.edges())
+        if not edges:
+            pytest.skip("No edges in initial topology")
+
+        node_a, node_b = edges[0]
+
+        # First encounter — should update P
+        engine._communication.process_encounter(node_a, node_b, 0.0)
+        p_after_first = engine._communication.get_delivery_predictability(
+            node_a, node_b
+        )
+        assert p_after_first > 0
+
+        # Record the link as active (simulating what the engine does)
+        link_key = (min(node_a, node_b), max(node_a, node_b))
+        engine._active_links.add(link_key)
+
+        # Second call via transfer_messages — should NOT increase P
+        engine._communication.transfer_messages(node_a, node_b, 0.0)
+        p_after_second = engine._communication.get_delivery_predictability(
+            node_a, node_b
+        )
+
+        # P should be the same (no aging at t=0, no encounter update)
+        assert p_after_second == pytest.approx(p_after_first)
+
+    def test_reconnection_triggers_new_encounter(self):
+        """Nodes that disconnect and reconnect should get a new encounter update."""
+        from ercs.communication.prophet import CommunicationLayer
+        from ercs.config.parameters import CommunicationParameters
+
+        params = NetworkParameters()
+        comm = CommunicationLayer(
+            comm_params=CommunicationParameters(),
+            network_params=params,
+            node_ids=["A", "B"],
+        )
+
+        # First encounter
+        comm.process_encounter("A", "B", current_time=0.0)
+        p_first = comm.get_delivery_predictability("A", "B")
+        assert p_first == pytest.approx(0.75)
+
+        # Simulate time passing + aging (nodes out of range)
+        comm.predictability.age_predictabilities("A", current_time=300.0)
+        p_aged = comm.get_delivery_predictability("A", "B")
+        assert p_aged < p_first  # Should have decayed
+
+        # Reconnection — new encounter should boost P
+        comm.process_encounter("A", "B", current_time=300.0)
+        p_reconnect = comm.get_delivery_predictability("A", "B")
+        assert p_reconnect > p_aged
+
+    def test_message_transfer_on_all_active_links(self):
+        """Message transfers should occur on all active links, not just new ones."""
+        from ercs.communication.prophet import (
+            CommunicationLayer,
+            MessageType,
+        )
+        from ercs.config.parameters import CommunicationParameters
+
+        params = NetworkParameters()
+        comm = CommunicationLayer(
+            comm_params=CommunicationParameters(),
+            network_params=params,
+            node_ids=["A", "B"],
+        )
+
+        # Establish encounter (connection-up)
+        comm.process_encounter("A", "B", current_time=0.0)
+
+        # Create a message from A to B
+        comm.create_message(
+            source_id="A",
+            destination_id="B",
+            message_type=MessageType.COORDINATION,
+            payload={"test": True},
+            current_time=1.0,
+        )
+
+        # transfer_messages (sustained contact) should deliver the message
+        results = comm.transfer_messages("A", "B", current_time=2.0)
+
+        delivered = [r for r in results if r.reason == "delivered"]
+        assert len(delivered) == 1
+
+
+# =============================================================================
 # Integration Tests
 # =============================================================================
 
