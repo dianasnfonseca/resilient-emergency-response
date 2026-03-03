@@ -19,6 +19,15 @@ sys.path.insert(0, str(project_root / "src"))
 from ercs.config.parameters import AlgorithmType, SimulationConfig
 from ercs.evaluation.metrics import MetricType, PerformanceEvaluator
 from ercs.simulation.engine import ExperimentRunner
+from ercs.visualization.animation import run_paired_simulation
+from ercs.visualization.diagnostics import (
+    find_message_journeys,
+    plot_all_message_paths,
+    plot_message_journey,
+    plot_predictability_evolution,
+    plot_predictability_graph,
+    plot_predictability_heatmap,
+)
 from ercs.visualization.plots import (
     COLORS,
     METRICS_CONFIG,
@@ -57,6 +66,10 @@ if "df" not in st.session_state:
     st.session_state.df = None
 if "report" not in st.session_state:
     st.session_state.report = None
+if "diag_frames" not in st.session_state:
+    st.session_state.diag_frames = None  # (adaptive_frames, baseline_frames)
+if "diag_fwd" not in st.session_state:
+    st.session_state.diag_fwd = None  # (adaptive_fwd, baseline_fwd)
 
 # ---------------------------------------------------------------------------
 # Sidebar
@@ -114,8 +127,9 @@ with st.sidebar:
 # Main area — tabs
 # ---------------------------------------------------------------------------
 
-tab_setup, tab_run, tab_viz, tab_stats, tab_findings = st.tabs(
-    ["Parameters", "Run Experiment", "Visualizations", "Statistical Analysis", "Key Findings"]
+tab_setup, tab_run, tab_viz, tab_diag, tab_stats, tab_findings = st.tabs(
+    ["Parameters", "Run Experiment", "Visualizations", "Network Diagnostics",
+     "Statistical Analysis", "Key Findings"]
 )
 
 # ---- Tab 1: Parameters ----
@@ -276,7 +290,163 @@ with tab_viz:
             st.success(f"Saved {len(figures)} figures to `{output_dir}`")
 
 
-# ---- Tab 4: Statistical Analysis ----
+# ---- Tab 4: Network Diagnostics ----
+with tab_diag:
+    st.header("Network Diagnostics")
+    st.markdown(
+        "Visualizations of the PRoPHET routing protocol, message forwarding, "
+        "and node mobility from a single representative simulation run."
+    )
+
+    diag_col1, diag_col2 = st.columns([1, 3])
+    with diag_col1:
+        diag_connectivity = st.selectbox(
+            "Connectivity level",
+            options=config.network.connectivity_scenarios,
+            format_func=lambda x: f"{x * 100:.0f}%",
+            index=len(config.network.connectivity_scenarios) - 1,  # lowest (most interesting)
+        )
+
+    if st.button("Generate Diagnostics", type="primary", use_container_width=True):
+        with st.spinner(f"Running paired simulation at {diag_connectivity * 100:.0f}% connectivity..."):
+            start_diag = time.time()
+            adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd = run_paired_simulation(
+                config=config,
+                connectivity_level=diag_connectivity,
+                seed=42,
+                sample_interval=30.0,
+            )
+            elapsed_diag = time.time() - start_diag
+
+        st.session_state.diag_frames = (adaptive_frames, baseline_frames)
+        st.session_state.diag_fwd = (adaptive_fwd, baseline_fwd)
+        st.success(f"Diagnostics generated in {elapsed_diag:.1f}s "
+                   f"({len(adaptive_frames)} frames per algorithm)")
+
+    if st.session_state.diag_frames is not None:
+        adaptive_frames, baseline_frames = st.session_state.diag_frames
+        adaptive_fwd, baseline_fwd = st.session_state.diag_fwd
+
+        # --- PRoPHET Predictability Graph ---
+        st.divider()
+        st.subheader("PRoPHET Predictability Graph")
+        st.caption("Network graph showing predictability values between nodes at a given time snapshot.")
+
+        max_frame_idx = len(adaptive_frames) - 1
+        snapshot_idx = st.slider(
+            "Snapshot (frame index)",
+            min_value=0,
+            max_value=max_frame_idx,
+            value=max_frame_idx // 2,
+            key="pred_graph_slider",
+        )
+
+        pred_cols = st.columns(2)
+        with pred_cols[0]:
+            st.markdown("**Adaptive**")
+            fig = plot_predictability_graph(adaptive_frames[snapshot_idx], config, algorithm_label="Adaptive")
+            st.pyplot(fig)
+        with pred_cols[1]:
+            st.markdown("**Baseline**")
+            fig = plot_predictability_graph(baseline_frames[snapshot_idx], config, algorithm_label="Baseline")
+            st.pyplot(fig)
+
+        # --- Predictability Heatmap ---
+        st.divider()
+        st.subheader("Predictability Heatmap")
+        st.caption("Coord-to-mobile predictability matrix at the selected snapshot.")
+
+        hm_cols = st.columns(2)
+        with hm_cols[0]:
+            fig = plot_predictability_heatmap(adaptive_frames[snapshot_idx], algorithm_label="Adaptive")
+            st.pyplot(fig)
+        with hm_cols[1]:
+            fig = plot_predictability_heatmap(baseline_frames[snapshot_idx], algorithm_label="Baseline")
+            st.pyplot(fig)
+
+        # --- Predictability Evolution ---
+        st.divider()
+        st.subheader("Predictability Evolution")
+        st.caption("Time series of how predictability values build and decay over the simulation.")
+
+        evo_cols = st.columns(2)
+        with evo_cols[0]:
+            fig = plot_predictability_evolution(adaptive_frames, algorithm_label="Adaptive")
+            st.pyplot(fig)
+        with evo_cols[1]:
+            fig = plot_predictability_evolution(baseline_frames, algorithm_label="Baseline")
+            st.pyplot(fig)
+
+        # --- Message Journey ---
+        st.divider()
+        st.subheader("Message Journey")
+        st.caption("Hop-by-hop path of a message through the network.")
+
+        for label, fwd_log, frames in [
+            ("Adaptive", adaptive_fwd, adaptive_frames),
+            ("Baseline", baseline_fwd, baseline_frames),
+        ]:
+            journeys = find_message_journeys(fwd_log)
+            if journeys:
+                msg_id = min(journeys.keys(), key=lambda m: journeys[m][0].timestamp)
+                fig = plot_message_journey(msg_id, journeys[msg_id], frames, config, algorithm_label=label)
+                st.pyplot(fig)
+            else:
+                st.info(f"No forwarding events recorded for {label}.")
+
+        # --- All Message Paths ---
+        st.divider()
+        st.subheader("All Message Paths")
+        st.caption("Overview of all message routes, colored by delivery status.")
+
+        path_cols = st.columns(2)
+        with path_cols[0]:
+            fig = plot_all_message_paths(adaptive_frames, adaptive_fwd, config, algorithm_label="Adaptive")
+            st.pyplot(fig)
+        with path_cols[1]:
+            fig = plot_all_message_paths(baseline_frames, baseline_fwd, config, algorithm_label="Baseline")
+            st.pyplot(fig)
+
+        # --- Save diagnostic figures ---
+        st.divider()
+        if st.button("Save Diagnostic Figures to outputs/figures/"):
+            output_dir = project_root / "outputs" / "figures"
+            mid = len(adaptive_frames) // 2
+            diag_figures = {
+                "fig_predictability_adaptive": plot_predictability_graph(
+                    adaptive_frames[mid], config, algorithm_label="Adaptive"),
+                "fig_predictability_baseline": plot_predictability_graph(
+                    baseline_frames[mid], config, algorithm_label="Baseline"),
+                "fig_pred_heatmap_adaptive": plot_predictability_heatmap(
+                    adaptive_frames[mid], algorithm_label="Adaptive"),
+                "fig_pred_heatmap_baseline": plot_predictability_heatmap(
+                    baseline_frames[mid], algorithm_label="Baseline"),
+                "fig_pred_evolution_adaptive": plot_predictability_evolution(
+                    adaptive_frames, algorithm_label="Adaptive"),
+                "fig_pred_evolution_baseline": plot_predictability_evolution(
+                    baseline_frames, algorithm_label="Baseline"),
+                "fig_paths_adaptive": plot_all_message_paths(
+                    adaptive_frames, adaptive_fwd, config, algorithm_label="Adaptive"),
+                "fig_paths_baseline": plot_all_message_paths(
+                    baseline_frames, baseline_fwd, config, algorithm_label="Baseline"),
+            }
+            # Add message journey figures if available
+            for alg_label, fwd_log, frames in [
+                ("adaptive", adaptive_fwd, adaptive_frames),
+                ("baseline", baseline_fwd, baseline_frames),
+            ]:
+                journeys = find_message_journeys(fwd_log)
+                if journeys:
+                    msg_id = min(journeys.keys(), key=lambda m: journeys[m][0].timestamp)
+                    diag_figures[f"fig_journey_{alg_label}"] = plot_message_journey(
+                        msg_id, journeys[msg_id], frames, config, algorithm_label=alg_label.capitalize())
+
+            for name, fig in diag_figures.items():
+                save_figure(fig, name, output_dir)
+            st.success(f"Saved {len(diag_figures)} diagnostic figures to `{output_dir}`")
+
+
+# ---- Tab 5: Statistical Analysis ----
 with tab_stats:
     st.header("Statistical Analysis")
 
@@ -332,7 +502,7 @@ with tab_stats:
             )
 
 
-# ---- Tab 5: Key Findings ----
+# ---- Tab 6: Key Findings ----
 with tab_findings:
     st.header("Key Findings")
 

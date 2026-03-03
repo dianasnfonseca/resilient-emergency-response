@@ -24,7 +24,8 @@
       "Bash(do python scripts/diagnose_encounters.py --duration 6000 --connectivity $conn --algorithm $algo --seed $seed)",
       "Bash(echo \"[$algo conn=$conn seed=$seed]\")",
       "Bash(done)",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/dashboard.py'', doraise=True\\)\")"
     ],
     "additionalDirectories": [
       "/Users/dianafonseca/resilient-emergency-response/outputs/figures"
