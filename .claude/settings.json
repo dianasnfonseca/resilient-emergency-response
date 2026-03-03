@@ -25,7 +25,8 @@
       "Bash(echo \"[$algo conn=$conn seed=$seed]\")",
       "Bash(done)",
       "Bash(python3 -c \":*)",
-      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/dashboard.py'', doraise=True\\)\")"
+      "Bash(python -c \"import py_compile; py_compile.compile\\(''app/dashboard.py'', doraise=True\\)\")",
+      "Bash(python scripts/diagnose_coordination.py)"
     ],
     "additionalDirectories": [
       "/Users/dianafonseca/resilient-emergency-response/outputs/figures"

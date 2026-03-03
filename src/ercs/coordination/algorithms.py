@@ -40,6 +40,12 @@ from ercs.config.parameters import (
 )
 from ercs.scenario.generator import Task
 
+# Weighted score parameters for adaptive algorithm
+# Equal weights represent neutral balance between predictability and proximity
+# Following multi-criteria approaches in DTN protocols (Kumar et al., 2023)
+PREDICTABILITY_WEIGHT = 0.5  # α
+PROXIMITY_WEIGHT = 0.5  # β
+
 
 class NetworkStateProvider(Protocol):
     """Protocol for querying network state from communication layer."""
@@ -301,15 +307,19 @@ class AdaptiveCoordinator(CoordinatorBase):
     The adaptive algorithm:
     1. Processes tasks in urgency order (High > Medium > Low)
     2. Considers only responders with available communication paths (P > 0)
-    3. Selects the nearest reachable responder
+    3. Calculates a weighted score combining predictability and proximity
+    4. Selects the responder with highest combined score
 
-    This algorithm represents the network-aware approach that leverages
-    PRoPHET delivery predictability values to make informed assignment
-    decisions under intermittent connectivity.
+    The weighted score balances message deliverability (network-awareness) with
+    response effectiveness (responder proximity). This follows multi-criteria
+    approaches in DTN protocol extensions (Kumar et al., 2023 - EPP).
+
+    Score = α × P_norm + β × D_norm, where α = β = 0.5
 
     Sources:
         - Kaji et al. (2025): Urgency-first prioritisation
-        - Ullah & Qayyum (2022): P > 0 threshold
+        - Ullah & Qayyum (2022): P > 0 threshold, predictability-based selection
+        - Kumar et al. (2023): EPP weighted multi-criteria approach
         - Oksuz & Satoglu (2024): Urgency-based allocation
     """
 
@@ -424,10 +434,16 @@ class AdaptiveCoordinator(CoordinatorBase):
         coordination_node: str,
     ) -> tuple[str | None, float, float | None]:
         """
-        Select responder with network awareness.
+        Select responder using weighted score of predictability and proximity.
 
         Considers only responders with P > 0 (available communication path),
-        then selects nearest by Euclidean distance.
+        then calculates a combined score balancing delivery predictability
+        with geographic proximity to the task location.
+
+        Score = α × P_norm + β × D_norm
+        - P_norm: predictability normalised by max among candidates
+        - D_norm: proximity score (1 - normalised distance)
+        - α = β = 0.5 (equal weights)
 
         Args:
             task: Task to assign
@@ -444,9 +460,10 @@ class AdaptiveCoordinator(CoordinatorBase):
         responders = responder_locator.get_all_responder_ids()
         threshold = self.params.available_path_threshold
 
-        best_responder = None
-        best_distance = float("inf")
-        best_predictability = 0.0
+        # First pass: collect all reachable candidates with their metrics
+        candidates = []
+        max_predictability = 0.0
+        max_distance = 0.0
 
         for responder_id in responders:
             # Check communication path availability
@@ -457,7 +474,7 @@ class AdaptiveCoordinator(CoordinatorBase):
             if predictability <= threshold:
                 continue  # No available path
 
-            # Calculate distance
+            # Calculate distance to task
             rx, ry = responder_locator.get_responder_position(responder_id)
             distance = self._calculate_distance(
                 task.target_location_x,
@@ -466,14 +483,45 @@ class AdaptiveCoordinator(CoordinatorBase):
                 ry,
             )
 
-            if distance < best_distance:
-                best_distance = distance
-                best_responder = responder_id
-                best_predictability = predictability
+            candidates.append({
+                "id": responder_id,
+                "predictability": predictability,
+                "distance": distance,
+            })
 
-        if best_responder is not None:
-            return best_responder, best_distance, best_predictability
-        return None, 0.0, None
+            # Track max values for normalisation
+            if predictability > max_predictability:
+                max_predictability = predictability
+            if distance > max_distance:
+                max_distance = distance
+
+        # No reachable candidates
+        if not candidates:
+            return None, 0.0, None
+
+        # Second pass: calculate weighted scores and select best
+        best_responder = None
+        best_score = -1.0
+        best_distance = 0.0
+        best_predictability = 0.0
+
+        for candidate in candidates:
+            # Normalise predictability to [0, 1]
+            p_norm = candidate["predictability"] / max_predictability if max_predictability > 0 else 0
+
+            # Normalise distance to [0, 1] and invert (closer = higher score)
+            d_norm = 1.0 - (candidate["distance"] / max_distance) if max_distance > 0 else 1.0
+
+            # Calculate weighted score
+            score = PREDICTABILITY_WEIGHT * p_norm + PROXIMITY_WEIGHT * d_norm
+
+            if score > best_score:
+                best_score = score
+                best_responder = candidate["id"]
+                best_distance = candidate["distance"]
+                best_predictability = candidate["predictability"]
+
+        return best_responder, best_distance, best_predictability
 
 
 class BaselineCoordinator(CoordinatorBase):
