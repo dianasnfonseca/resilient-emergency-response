@@ -78,7 +78,7 @@ PRIORITY_LEVELS = 3
 PATH_THRESHOLD = 0.0
 
 # =============================================================================
-# Experiment (derived)
+# Experiment 
 # =============================================================================
 
 TOTAL_CONFIGURATIONS = 6  # 2 algorithms × 3 connectivity levels
