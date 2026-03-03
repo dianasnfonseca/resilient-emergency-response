@@ -12,6 +12,8 @@ Tests cover:
 - Experiment runner functionality
 """
 
+import json
+
 import pytest
 
 from ercs.config.parameters import (
@@ -885,3 +887,121 @@ class TestSimulationIntegration:
         if results.tasks_assigned > 0:
             assert len(results.response_times) > 0
             assert results.average_response_time is not None
+
+
+# =============================================================================
+# Test Seed Validation & Valid Seeds Loading
+# =============================================================================
+
+
+class TestSeedValidation:
+    """Tests for seed validation and ExperimentRunner seed loading."""
+
+    def test_seed_validation_passes_for_known_good_seed(self):
+        """A seed that produces encounters should pass validation."""
+        import sys
+        from pathlib import Path
+
+        sys.path.insert(
+            0, str(Path(__file__).resolve().parent.parent / "scripts")
+        )
+
+        # Import validation function inline (it's a script, not a package)
+        from validate_seeds import validate_seed
+
+        config = SimulationConfig()
+        # Seed 1 at 0.75 connectivity should easily pass
+        assert validate_seed(seed=1, connectivity_level=0.75, config=config) is True
+
+    def test_valid_seeds_loaded_by_runner(self):
+        """ExperimentRunner should load seeds from config/valid_seeds.json."""
+        import json
+        from pathlib import Path
+
+        seeds_path = ExperimentRunner._VALID_SEEDS_PATH
+
+        if not seeds_path.exists():
+            pytest.skip("config/valid_seeds.json not found — run scripts/validate_seeds.py first")
+
+        runner = ExperimentRunner(use_valid_seeds=True)
+        assert runner._valid_seeds is not None
+        assert len(runner._valid_seeds) > 0
+
+        # Verify seeds match the file
+        with open(seeds_path) as f:
+            data = json.load(f)
+        expected = [int(s) for s in data["valid_seeds"]]
+        assert runner._valid_seeds == expected
+
+    def test_runner_falls_back_without_seeds_file(self, tmp_path, monkeypatch):
+        """ExperimentRunner falls back to sequential seeds when file is missing."""
+        # Point to a non-existent path
+        monkeypatch.setattr(
+            ExperimentRunner,
+            "_VALID_SEEDS_PATH",
+            tmp_path / "nonexistent.json",
+        )
+
+        runner = ExperimentRunner(base_seed=42, use_valid_seeds=True)
+        assert runner._valid_seeds is None
+
+        # Should fall back to sequential seeds
+        seeds = runner._get_seeds(5)
+        assert seeds == [42, 43, 44, 45, 46]
+
+    def test_runner_get_seeds_uses_valid_seeds(self, tmp_path, monkeypatch):
+        """_get_seeds returns pre-screened seeds when available."""
+        # Create a minimal valid_seeds.json
+        seeds_file = tmp_path / "valid_seeds.json"
+        seeds_file.write_text(json.dumps({"valid_seeds": [10, 20, 30, 40, 50]}))
+
+        monkeypatch.setattr(
+            ExperimentRunner, "_VALID_SEEDS_PATH", seeds_file
+        )
+
+        runner = ExperimentRunner(base_seed=42, use_valid_seeds=True)
+        seeds = runner._get_seeds(3)
+        assert seeds == [10, 20, 30]
+
+    def test_runner_use_valid_seeds_disabled(self):
+        """When use_valid_seeds=False, runner uses sequential seeds."""
+        runner = ExperimentRunner(base_seed=100, use_valid_seeds=False)
+        assert runner._valid_seeds is None
+
+        seeds = runner._get_seeds(4)
+        assert seeds == [100, 101, 102, 103]
+
+    def test_run_all_uses_consistent_seeds_across_algorithms(self):
+        """Both algorithms should use the same seed for each run number."""
+        quick_config = SimulationConfig(
+            scenario=ScenarioParameters(
+                simulation_duration_seconds=300,
+                message_rate_per_minute=0.5,
+                runs_per_config=2,
+                warmup_period_seconds=0,
+            ),
+            coordination=CoordinationParameters(
+                update_interval_seconds=60,
+            ),
+        )
+
+        runner = ExperimentRunner(
+            config=quick_config,
+            base_seed=42,
+            use_valid_seeds=False,
+        )
+        results = runner.run_all(
+            algorithms=[AlgorithmType.ADAPTIVE, AlgorithmType.BASELINE],
+            connectivity_levels=[CONNECTIVITY_MILD],
+            runs_per_config=2,
+        )
+
+        # 2 algorithms x 1 connectivity x 2 runs = 4 results
+        assert len(results) == 4
+
+        # Adaptive runs 0,1 should use same seeds as Baseline runs 0,1
+        adaptive = [r for r in results if r.algorithm == AlgorithmType.ADAPTIVE]
+        baseline = [r for r in results if r.algorithm == AlgorithmType.BASELINE]
+
+        for i in range(2):
+            assert adaptive[i].random_seed == baseline[i].random_seed
