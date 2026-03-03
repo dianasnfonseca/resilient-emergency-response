@@ -70,10 +70,31 @@ class MobilityModel(str, Enum):
     """
     Node mobility models for DTN simulation.
 
-    Source: Ullah & Qayyum (2022) - Random Waypoint commonly used in DTN research
+    Sources:
+        - Ullah & Qayyum (2022): Random Waypoint commonly used in DTN research
+        - Aschenbruck et al. (2009): Disaster Area mobility model
     """
 
     RANDOM_WAYPOINT = "random_waypoint"
+    ROLE_BASED_WAYPOINT = "role_based_waypoint"
+
+
+class ResponderRole(str, Enum):
+    """
+    Responder role determining mobility pattern.
+
+    Different roles produce heterogeneous encounter patterns that allow
+    PRoPHET to build differentiated delivery predictability values.
+
+    Sources:
+        - Aschenbruck et al. (2009): Disaster Area mobility model
+        - Uddin et al. (2011): Post-Disaster Mobility Model
+        - Stute et al. (2017): Natural Disaster Mobility Model
+    """
+
+    RESCUE = "rescue"        # ~60% — localised in incident zone
+    TRANSPORT = "transport"  # ~25% — shuttle between incident and coordination zones
+    LIAISON = "liaison"      # ~15% — free movement across entire area
 
 
 # =============================================================================
@@ -391,9 +412,12 @@ class ScenarioParameters(BaseModel):
     )
 
     warmup_period_seconds: int = Field(
-        default=0,
+        default=1800,
         ge=0,
-        description="Warm-up period (0). Source: Grassmann (2008)",
+        description="Warm-up period for PRoPHET encounter history (seconds). "
+        "Allows delivery predictability to build through actual node "
+        "encounters before task generation begins. "
+        "Source: Law (2015) — warm-up period methodology",
     )
 
     runs_per_configuration: int = Field(
@@ -506,6 +530,11 @@ class SimulationConfig(BaseModel):
         default="INFO",
         description="Logging verbosity level",
     )
+
+    @property
+    def total_simulation_duration(self) -> float:
+        """Total duration including warm-up period."""
+        return self.scenario.warmup_period_seconds + self.scenario.simulation_duration_seconds
 
     @property
     def total_experimental_runs(self) -> int:

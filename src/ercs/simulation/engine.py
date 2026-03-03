@@ -54,6 +54,7 @@ class SimulationEventType(str, Enum):
 
     SIMULATION_START = "simulation_start"
     SIMULATION_END = "simulation_end"
+    WARMUP_END = "warmup_end"
     TASK_CREATED = "task_created"
     COORDINATION_CYCLE = "coordination_cycle"
     TASK_ASSIGNED = "task_assigned"
@@ -329,13 +330,13 @@ class SimulationEngine:
 
         # Run simulation loop
         self._is_running = True
-        duration = self.config.scenario.simulation_duration_seconds
+        total_duration = self.config.total_simulation_duration
 
         while self._is_running and self._event_queue:
             # Get next event
             event = self._pop_next_event()
 
-            if event.timestamp > duration:
+            if event.timestamp > total_duration:
                 break
 
             self._current_time = event.timestamp
@@ -366,11 +367,6 @@ class SimulationEngine:
             network_params=self.config.network,
             node_ids=self._topology.get_all_node_ids(),
         )
-
-        # Initialize predictability from coordination nodes to mobile nodes
-        # This simulates pre-established communication infrastructure
-        # (coordination nodes assumed to have backhaul connectivity)
-        self._initialize_coordination_predictability()
 
         # Phase 4: Coordination
         self._coordinator = create_coordinator(
@@ -445,74 +441,22 @@ class SimulationEngine:
             random_seed=self.random_seed,
         )
 
-    def _initialize_coordination_predictability(self) -> None:
-        """
-        Initialize delivery predictability from coordination to mobile nodes.
-
-        In the simulation architecture, coordination nodes are geographically
-        separate from the incident zone (Ullah & Qayyum, 2022). To enable
-        message delivery, we assume coordination nodes have infrastructure
-        connectivity (wired backhaul or relay) that provides initial
-        predictability to mobile nodes within the incident zone.
-
-        This is a design decision that enables the adaptive algorithm to
-        function while maintaining the geographic separation specified in
-        the Phase 1 topology.
-        """
-        coord_nodes = self._topology.get_coordination_node_ids()
-        mobile_nodes = self._topology.get_mobile_responder_ids()
-
-        # Set initial predictability from each coord node to all mobile nodes
-        # Use P_init value from PRoPHET parameters (0.75)
-        p_init = self.config.communication.prophet.p_init
-
-        for coord_id in coord_nodes:
-            for mobile_id in mobile_nodes:
-                # Directly set predictability (simulates pre-established paths)
-                self._communication.predictability.set_predictability(
-                    coord_id, mobile_id, p_init
-                )
-
     def _schedule_initial_events(self) -> None:
-        """Schedule initial simulation events."""
-        duration = self.config.scenario.simulation_duration_seconds
-        update_interval = self.config.coordination.update_interval_seconds
+        """Schedule initial simulation events with warm-up period.
 
-        # Schedule coordination cycles
-        t = 0.0
-        while t <= duration:
-            self._schedule_event(
-                SimulationEventType.COORDINATION_CYCLE,
-                t,
-                {"cycle_time": t},
-            )
-            t += update_interval
-
-        # Schedule task creation events
-        for task in self._scenario.tasks:
-            self._schedule_event(
-                SimulationEventType.TASK_CREATED,
-                task.creation_time,
-                {"task_id": task.task_id},
-            )
-
-        # Schedule mobility updates (every second)
-        self._schedule_mobility_updates()
-
-        # Schedule periodic node encounters (less frequent than mobility)
-        self._schedule_encounters()
-
-    def _schedule_mobility_updates(self) -> None:
+        During warm-up, only mobility and encounter events run so that
+        PRoPHET delivery predictability builds through actual node
+        encounters.  Task creation and coordination cycles are delayed
+        until after the warm-up period ends.
         """
-        Schedule periodic mobility updates.
-        
-        Updates every second for smooth movement simulation.
-        """
-        duration = self.config.scenario.simulation_duration_seconds
-        mobility_interval = 1.0  # Update every second
-        
-        t = 0.0
-        while t <= duration:
+        warmup_duration = self.config.scenario.warmup_period_seconds
+        active_start = warmup_duration  # When active simulation begins
+        total_duration = self.config.total_simulation_duration
+
+        # Schedule mobility updates throughout ENTIRE simulation (including warm-up)
+        mobility_interval = 1.0
+        t = mobility_interval
+        while t <= total_duration:
             self._schedule_event(
                 SimulationEventType.MOBILITY_UPDATE,
                 t,
@@ -520,19 +464,46 @@ class SimulationEngine:
             )
             t += mobility_interval
 
-    def _schedule_encounters(self) -> None:
-        """Schedule node encounter events based on connectivity."""
-        duration = self.config.scenario.simulation_duration_seconds
-        encounter_interval = 10.0  # Check encounters every 10 seconds
-
-        t = 0.0
-        while t <= duration:
+        # Schedule node encounter checks throughout ENTIRE simulation
+        encounter_interval = 10.0
+        t = encounter_interval
+        while t <= total_duration:
             self._schedule_event(
                 SimulationEventType.NODE_ENCOUNTER,
                 t,
                 {},
             )
             t += encounter_interval
+
+        # Log warm-up end / active simulation start
+        if warmup_duration > 0:
+            self._schedule_event(
+                SimulationEventType.WARMUP_END,
+                warmup_duration,
+                {},
+            )
+
+        # Schedule coordination cycles ONLY after warm-up
+        update_interval = self.config.coordination.update_interval_seconds
+        t = active_start
+        while t <= total_duration:
+            self._schedule_event(
+                SimulationEventType.COORDINATION_CYCLE,
+                t,
+                {"cycle_time": t},
+            )
+            t += update_interval
+
+        # Schedule task creation events ONLY after warm-up
+        # Shift task times to start from active_start
+        for task in self._scenario.tasks:
+            adjusted_time = active_start + task.creation_time
+            if adjusted_time <= total_duration:
+                self._schedule_event(
+                    SimulationEventType.TASK_CREATED,
+                    adjusted_time,
+                    {"task_id": task.task_id},
+                )
 
     def _schedule_event(
         self,
@@ -571,6 +542,47 @@ class SimulationEngine:
 
         elif event.event_type == SimulationEventType.NODE_ENCOUNTER:
             self._handle_node_encounters(event, results)
+
+        elif event.event_type == SimulationEventType.WARMUP_END:
+            self._handle_warmup_end(event, results)
+
+    def _handle_warmup_end(
+        self,
+        event: SimulationEvent,
+        results: SimulationResults,
+    ) -> None:
+        """Handle end of warm-up period.
+
+        Logs predictability statistics at the transition from warm-up
+        to active simulation so we can verify that PRoPHET encounter
+        history built meaningful (non-uniform) values.
+        """
+        total_nonzero = 0
+        total_pairs = 0
+
+        coord_nodes = self._topology.get_coordination_node_ids()
+        mobile_nodes = self._topology.get_mobile_responder_ids()
+
+        for coord_id in coord_nodes:
+            for mobile_id in mobile_nodes:
+                p = self._communication.get_delivery_predictability(
+                    coord_id, mobile_id
+                )
+                total_pairs += 1
+                if p > 0:
+                    total_nonzero += 1
+
+        coverage_pct = 100 * total_nonzero / total_pairs if total_pairs > 0 else 0
+
+        self._log_event(
+            SimulationEventType.WARMUP_END,
+            event.timestamp,
+            {
+                "nonzero_predictabilities": total_nonzero,
+                "total_pairs": total_pairs,
+                "coverage_pct": coverage_pct,
+            },
+        )
 
     def _handle_task_created(
         self,

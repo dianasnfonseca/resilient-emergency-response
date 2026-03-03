@@ -61,7 +61,8 @@ AGING_INTERVAL_S = 30.0
 
 MESSAGE_RATE_PER_MIN = 2.0
 SIMULATION_DURATION_S = 6_000  # ~100 minutes (Ullah & Qayyum, 2022)
-WARMUP_PERIOD_S = 0
+WARMUP_PERIOD_S = 1_800  # 30 minutes — PRoPHET encounter warm-up
+TOTAL_DURATION_S = 7_800  # Warmup + active (1800 + 6000)
 RUNS_PER_CONFIG = 30  # (Law, 2015)
 
 # Urgency distribution (Li et al., 2025)

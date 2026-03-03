@@ -1,26 +1,39 @@
 """
-Random Waypoint Mobility Model (Phase 1 Extension).
+Role-Based Random Waypoint Mobility Model (Phase 1 Extension).
 
 This module implements node mobility for the emergency response simulation,
 enabling dynamic network topology changes essential for PRoPHET protocol
 operation and realistic DTN evaluation.
 
-The Random Waypoint model:
-1. Node selects random destination within operating zone
-2. Node moves toward destination at random speed (0-20 m/s)
-3. Optional pause at destination
-4. Repeat
+Two mobility models are supported:
 
-Operating Zone:
-- Mobile responders can move within the entire simulation area
-- This enables transit between incident zone and coordination zone
-- Creates encounter opportunities for message relay
+**Random Waypoint** (original):
+  All nodes select random destinations uniformly across the entire
+  simulation area with identical speed ranges and pause times.
+
+**Role-Based Random Waypoint** (default):
+  Nodes are assigned one of three roles — RESCUE, TRANSPORT, LIAISON —
+  each with a distinct waypoint zone and speed range.  This creates
+  heterogeneous encounter patterns that PRoPHET can exploit, allowing
+  the Adaptive algorithm to differentiate between responders.
+
+Role definitions:
+  - RESCUE (~60%): confined to incident zone, slow (1-5 m/s),
+    long pauses — rarely encounter coordination nodes.
+  - TRANSPORT (~25%): shuttle between incident and coordination zones,
+    fast (5-20 m/s), moderate pauses — frequent coord encounters.
+  - LIAISON (~15%): free movement across entire area, medium speed
+    (1-10 m/s), brief pauses — variable encounter patterns.
 
 Sources:
     - Ullah & Qayyum (2022): Random Waypoint model, speed range 0-20 m/s
+    - Aschenbruck et al. (2009): Disaster Area mobility model
+    - Uddin et al. (2011): Post-Disaster Mobility Model
+    - Stute et al. (2017): Natural Disaster Mobility Model
     - Keykhaei et al. (2024): Multi-agent mobility in emergency evacuation
-    - Chapter1_v2: Mobility model selection rationale
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,7 +41,7 @@ from typing import Protocol
 
 import numpy as np
 
-from ercs.config.parameters import NetworkParameters, ZoneConfig
+from ercs.config.parameters import NetworkParameters, ResponderRole, ZoneConfig
 
 
 class MobilityState(str, Enum):
@@ -57,22 +70,78 @@ class Waypoint:
 
 
 @dataclass
+class RoleConfig:
+    """Per-role mobility parameters.
+
+    Attributes:
+        speed_min: Minimum movement speed (m/s)
+        speed_max: Maximum movement speed (m/s)
+        pause_min: Minimum pause duration (seconds)
+        pause_max: Maximum pause duration (seconds)
+        zone_mode: Which zone the role selects waypoints from —
+            ``"incident"`` (incident zone only),
+            ``"shuttle"`` (alternates incident ↔ coordination), or
+            ``"full"`` (entire simulation area).
+    """
+
+    speed_min: float
+    speed_max: float
+    pause_min: float
+    pause_max: float
+    zone_mode: str  # "incident" | "shuttle" | "full"
+
+
+ROLE_CONFIGS: dict[ResponderRole, RoleConfig] = {
+    ResponderRole.RESCUE: RoleConfig(
+        speed_min=1.0,
+        speed_max=5.0,
+        pause_min=10.0,
+        pause_max=60.0,
+        zone_mode="incident",
+    ),
+    ResponderRole.TRANSPORT: RoleConfig(
+        speed_min=5.0,
+        speed_max=20.0,
+        pause_min=30.0,
+        pause_max=120.0,
+        zone_mode="shuttle",
+    ),
+    ResponderRole.LIAISON: RoleConfig(
+        speed_min=1.0,
+        speed_max=10.0,
+        pause_min=0.0,
+        pause_max=30.0,
+        zone_mode="full",
+    ),
+}
+
+# Role distribution (fraction of total mobile nodes)
+ROLE_DISTRIBUTION: dict[ResponderRole, float] = {
+    ResponderRole.RESCUE: 0.60,
+    ResponderRole.TRANSPORT: 0.25,
+    ResponderRole.LIAISON: 0.15,
+}
+
+
+@dataclass
 class MobileNodeState:
     """
     Mobility state for a single node.
-    
+
     Attributes:
         node_id: Unique identifier
         x: Current X position (metres)
         y: Current Y position (metres)
+        role: Responder role (determines waypoint zone and speed)
         state: Current mobility state
         waypoint: Current target waypoint (if moving)
         pause_end_time: When pause ends (if paused)
     """
-    
+
     node_id: str
     x: float
     y: float
+    role: ResponderRole | None = None
     state: MobilityState = MobilityState.PAUSED
     waypoint: Waypoint | None = None
     pause_end_time: float = 0.0
@@ -144,7 +213,10 @@ class MobilityManager:
     ) -> None:
         """
         Initialize mobility states for all mobile nodes.
-        
+
+        Assigns responder roles deterministically based on node index
+        (RESCUE → first 60%, TRANSPORT → next 25%, LIAISON → remaining 15%).
+
         Args:
             mobile_node_ids: IDs of mobile nodes
             initial_positions: Mapping of node_id to (x, y) position
@@ -152,19 +224,23 @@ class MobilityManager:
         """
         self._rng = np.random.default_rng(random_seed)
         self._node_states.clear()
-        
-        for node_id in mobile_node_ids:
+
+        # Deterministic role assignment by index
+        roles = _assign_roles(len(mobile_node_ids))
+
+        for idx, node_id in enumerate(mobile_node_ids):
             if node_id in initial_positions:
                 x, y = initial_positions[node_id]
                 state = MobileNodeState(
                     node_id=node_id,
                     x=x,
                     y=y,
+                    role=roles[idx],
                     state=MobilityState.PAUSED,
                     pause_end_time=0.0,
                 )
                 self._node_states[node_id] = state
-                
+
                 # Immediately assign initial waypoint
                 self._assign_new_waypoint(state)
     
@@ -243,22 +319,22 @@ class MobilityManager:
         return True
     
     def _assign_new_waypoint(self, state: MobileNodeState) -> None:
-        """Assign a new random waypoint within the operating zone."""
-        # Operating zone is the entire simulation area
-        # This allows nodes to transit between incident and coordination zones
-        zone = self.parameters.simulation_area
-        
-        # Generate random destination
+        """Assign a new random waypoint, respecting the node's role."""
+        role_cfg = ROLE_CONFIGS.get(state.role) if state.role is not None else None
+
+        if role_cfg is None:
+            # Fallback: original RWP behaviour (full area, manager speeds)
+            zone = self.parameters.simulation_area
+            speed = self._rng.uniform(max(1.0, self.speed_min), self.speed_max)
+            pause = self._rng.uniform(self.pause_min, self.pause_max)
+        else:
+            zone = self._get_target_zone(state, role_cfg)
+            speed = self._rng.uniform(role_cfg.speed_min, role_cfg.speed_max)
+            pause = self._rng.uniform(role_cfg.pause_min, role_cfg.pause_max)
+
         target_x = self._rng.uniform(zone.origin_x, zone.origin_x + zone.width_m)
         target_y = self._rng.uniform(zone.origin_y, zone.origin_y + zone.height_m)
-        
-        # Generate random speed (avoiding zero to ensure movement)
-        # Use minimum of 1 m/s to avoid very slow nodes
-        speed = self._rng.uniform(max(1.0, self.speed_min), self.speed_max)
-        
-        # Generate random pause duration
-        pause = self._rng.uniform(self.pause_min, self.pause_max)
-        
+
         state.waypoint = Waypoint(
             x=target_x,
             y=target_y,
@@ -266,6 +342,32 @@ class MobilityManager:
             pause_duration=pause,
         )
         state.state = MobilityState.MOVING
+
+    def _get_target_zone(
+        self, state: MobileNodeState, role_cfg: RoleConfig
+    ) -> ZoneConfig:
+        """Select the target zone for a waypoint based on role."""
+        if role_cfg.zone_mode == "incident":
+            return self.parameters.incident_zone
+        elif role_cfg.zone_mode == "shuttle":
+            # Alternate between incident and coordination zone:
+            # if currently closer to incident zone, head to coordination,
+            # and vice versa.
+            iz = self.parameters.incident_zone
+            cz = self.parameters.coordination_zone
+            iz_cx = iz.origin_x + iz.width_m / 2
+            iz_cy = iz.origin_y + iz.height_m / 2
+            cz_cx = cz.origin_x + cz.width_m / 2
+            cz_cy = cz.origin_y + cz.height_m / 2
+            dist_to_iz = np.sqrt(
+                (state.x - iz_cx) ** 2 + (state.y - iz_cy) ** 2
+            )
+            dist_to_cz = np.sqrt(
+                (state.x - cz_cx) ** 2 + (state.y - cz_cy) ** 2
+            )
+            return cz if dist_to_iz < dist_to_cz else iz
+        else:  # "full"
+            return self.parameters.simulation_area
     
     def get_position(self, node_id: str) -> tuple[float, float] | None:
         """Get current position of a node."""
@@ -284,6 +386,33 @@ class MobilityManager:
     def get_node_ids(self) -> list[str]:
         """Get list of managed node IDs."""
         return list(self._node_states.keys())
+
+
+def _assign_roles(n_nodes: int) -> list[ResponderRole]:
+    """Assign responder roles deterministically by index.
+
+    Distribution (approximate):
+      - RESCUE:    first 60% of nodes
+      - TRANSPORT: next 25%
+      - LIAISON:   remaining 15%
+
+    Args:
+        n_nodes: Total number of mobile nodes.
+
+    Returns:
+        List of roles, one per node index.
+    """
+    n_rescue = round(n_nodes * ROLE_DISTRIBUTION[ResponderRole.RESCUE])
+    n_transport = round(n_nodes * ROLE_DISTRIBUTION[ResponderRole.TRANSPORT])
+    # Remainder goes to LIAISON
+    n_liaison = n_nodes - n_rescue - n_transport
+
+    roles: list[ResponderRole] = (
+        [ResponderRole.RESCUE] * n_rescue
+        + [ResponderRole.TRANSPORT] * n_transport
+        + [ResponderRole.LIAISON] * n_liaison
+    )
+    return roles
 
 
 def calculate_encounters(

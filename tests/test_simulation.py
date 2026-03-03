@@ -183,6 +183,7 @@ class TestSimulationEngine:
         scenario = ScenarioParameters(
             simulation_duration_seconds=600,  # 10 minutes
             message_rate_per_minute=1.0,  # Fewer tasks
+            warmup_period_seconds=0,
         )
         coordination = CoordinationParameters(
             update_interval_seconds=120,  # 2 minutes
@@ -439,6 +440,7 @@ class TestExperimentRunner:
             simulation_duration_seconds=300,  # 5 minutes
             message_rate_per_minute=0.5,
             runs_per_configuration=2,  # Quick test
+            warmup_period_seconds=0,
         )
         coordination = CoordinationParameters(
             update_interval_seconds=60,
@@ -627,11 +629,16 @@ class TestSimulationIntegration:
 
     @pytest.fixture
     def integration_config(self) -> SimulationConfig:
-        """Config for integration tests."""
+        """Config for integration tests.
+
+        Uses a short warm-up (120s) so PRoPHET predictability builds
+        through encounters before the first coordination cycle.
+        """
         return SimulationConfig(
             scenario=ScenarioParameters(
                 simulation_duration_seconds=600,
                 message_rate_per_minute=MESSAGE_RATE_PER_MIN,
+                warmup_period_seconds=120,
             ),
             coordination=CoordinationParameters(
                 update_interval_seconds=120,

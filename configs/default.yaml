@@ -42,7 +42,7 @@ network:
   radio_range_m: 100.0
   buffer_size_bytes: 26214400  # 25 MB
   message_size_bytes: 512000  # 500 kB
-  mobility_model: random_waypoint
+  mobility_model: role_based_waypoint
   speed_min_mps: 0.0
   speed_max_mps: 20.0
 
@@ -68,7 +68,7 @@ scenario:
     medium: 0.50
     low: 0.30
   simulation_duration_seconds: 6000  # Ullah & Qayyum (2022)
-  warmup_period_seconds: 0
+  warmup_period_seconds: 1800  # 30 min warm-up for PRoPHET encounter history
   runs_per_configuration: 30  # Law (2015)
 
 # Phase 4: Coordination Layer

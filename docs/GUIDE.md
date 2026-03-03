@@ -117,11 +117,40 @@ resilient-emergency-response/
 
 ---
 
-## 4. The Event Cascade
+## 4. Warm-Up Period (PRoPHET Initialization)
+
+Before any tasks are generated, the simulation runs a warm-up period to build
+realistic PRoPHET delivery predictability values through actual node encounters.
+
+**Why warm-up is required:**
+
+- PRoPHET predictability starts at P=0 for all node pairs
+- Predictability only increases when nodes actually encounter each other
+- Without warm-up, the Adaptive algorithm cannot differentiate between responders
+- Pre-initializing P values uniformly violates PRoPHET protocol fundamentals
+
+**Warm-up behavior:**
+
+- Duration: 1800 seconds (30 minutes), matching the coordination interval
+- Mobility updates occur normally (nodes move via Random Waypoint)
+- Encounters are processed (PRoPHET equations update P values)
+- NO tasks are generated
+- NO coordination cycles execute
+
+**After warm-up:**
+
+- Mobile nodes near coordination zones have higher P values
+- Mobile nodes that rarely approach coordination zones have lower P values
+- Some mobile nodes may have P ≈ 0 (never encountered coordination nodes)
+- Adaptive algorithm can now meaningfully filter and score responders
+
+---
+
+## 5. The Event Cascade
 
 This is the core of the simulation — what triggers what and in what order.
 
-### 4.1 Initialization (before any events fire)
+### 5.1 Initialization (before any events fire)
 
 When `SimulationEngine.run()` is called:
 
@@ -137,51 +166,50 @@ _initialize_components():
   2. CommunicationLayer()             → Per-node message buffers (25 MB each)
                                         Delivery predictability matrix (all zeros)
                                         PRoPHET parameters: P_init=0.75, β=0.25, γ=0.98
+                                        All predictabilities start at P=0 — values
+                                        build through encounters during warm-up.
 
-  3. _initialize_coordination_         → Seed P(coord, mobile) = 0.75 for all pairs.
-     predictability()                   Coordination nodes have backhaul infrastructure,
-                                        so they start with nonzero predictability to
-                                        every mobile node. Without this, the Adaptive
-                                        algorithm could never assign tasks (P = 0 everywhere).
-
-  4. create_coordinator()             → AdaptiveCoordinator or BaselineCoordinator
+  3. create_coordinator()             → AdaptiveCoordinator or BaselineCoordinator
      CoordinationManager()              Manages pending task queue, 30-min cycle timer.
 
-  5. ScenarioGenerator.generate()     → ~200 tasks via Poisson process (2/min, ~100 min)
+  4. ScenarioGenerator.generate()     → ~200 tasks via Poisson process (2/min, ~100 min)
      manager.add_tasks()                All tasks queued for future coordination cycles.
                                         Each task has urgency (20% H, 50% M, 30% L)
                                         and a location within the incident zone.
 
-  6. _initialize_mobility()           → Random Waypoint states for 48 mobile nodes.
+  5. _initialize_mobility()           → Random Waypoint states for 48 mobile nodes.
                                         Speed 1–20 m/s, pause 0–30s at each waypoint.
                                         Movement covers the full simulation area (3000×1500m),
                                         enabling transit between incident and coordination zones.
 ```
 
-### 4.2 Event Scheduling
+### 5.2 Event Scheduling
 
 All events are pre-scheduled into a priority queue sorted by timestamp.
-The first `COORDINATION_CYCLE` fires at t=0 (assigns any tasks created at
-t=0), then every 30 minutes thereafter. `TASK_CREATED` events are drawn from
-the Poisson process and land at random times throughout the simulation.
+During warm-up (0–1800s), only `MOBILITY_UPDATE` and `NODE_ENCOUNTER` events
+fire — these build PRoPHET predictability through actual encounters. After
+warm-up, `COORDINATION_CYCLE` events start at t=1800 and repeat every 30
+minutes. `TASK_CREATED` events are shifted by the warm-up duration so no
+tasks appear before warm-up ends.
 
-| Event Type | Frequency | Count (~100 min run) |
-|---|---|---|
-| `MOBILITY_UPDATE` | Every 1 second | ~6,000 |
-| `NODE_ENCOUNTER` | Every 10 seconds | ~600 |
-| `TASK_CREATED` | Poisson (~2/min) | ~200 |
-| `COORDINATION_CYCLE` | Every 30 minutes | 3–4 |
+| Event Type | When | Frequency | Count (~130 min total) |
+| --- | --- | --- | --- |
+| `MOBILITY_UPDATE` | Entire simulation | Every 1 second | ~7,800 |
+| `NODE_ENCOUNTER` | Entire simulation | Every 10 seconds | ~780 |
+| `WARMUP_END` | t=1800 | Once | 1 |
+| `TASK_CREATED` | After warm-up | Poisson (~2/min) | ~200 |
+| `COORDINATION_CYCLE` | After warm-up | Every 30 minutes | 3–4 |
 
-### 4.3 Main Loop
+### 5.3 Main Loop
 
 ```python
 while event_queue is not empty:
     event = pop earliest event
-    if event.timestamp > simulation_duration: break
+    if event.timestamp > total_simulation_duration: break
     process_event(event)
 ```
 
-### 4.4 Event Processing — What Each Event Does
+### 5.4 Event Processing — What Each Event Does
 
 #### TASK_CREATED (Poisson arrivals, ~2/min)
 
@@ -271,7 +299,7 @@ message delivery: new connections as nodes physically move into range,
 and repeated communication attempts over existing links filtered by the
 connectivity level.
 
-### 4.5 The Critical Path (how a task assignment actually reaches a responder)
+### 5.5 The Critical Path (how a task assignment actually reaches a responder)
 
 ```
 Task created (Poisson)
@@ -294,7 +322,7 @@ flow relatively easily. At 20%, many messages expire (TTL = 300 min = 18,000s)
 before they can reach their destination — this is where Adaptive should
 outperform Baseline because it considers reachability when assigning tasks.
 
-### 4.6 PRoPHET Predictability Equations (Kumar et al., 2023)
+### 5.6 PRoPHET Predictability Equations (Kumar et al., 2023)
 
 Three equations govern the delivery predictability matrix `P`:
 
@@ -332,7 +360,7 @@ exceeding 1.0. This enables multi-hop forwarding decisions.
 These equations are applied inside `process_encounter()`, which is called
 by both MOBILITY_UPDATE (new connections) and NODE_ENCOUNTER (sustained links).
 
-### 4.7 Message Transfer Logic
+### 5.7 Message Transfer Logic
 
 When two nodes encounter each other, message exchange follows this logic
 for each message in the sender's buffer:
@@ -352,7 +380,7 @@ Transmission time = `message_size_bytes × 8 / transmit_speed_bps`
 
 ---
 
-## 5. The Two Algorithms
+## 6. The Two Algorithms
 
 ### Adaptive (urgency-first, network-aware)
 
@@ -394,7 +422,7 @@ response time) under degraded connectivity.
 
 ---
 
-## 6. The Experiment Matrix
+## 7. The Experiment Matrix
 
 ```
 2 algorithms × 3 connectivity levels × 30 runs = 180 total simulation runs
@@ -412,7 +440,7 @@ for statistical inference (Law, 2015).
 
 ---
 
-## 7. Configuration Reference
+## 8. Configuration Reference
 
 All configuration is defined in Pydantic models in `src/ercs/config/parameters.py`.
 The root model is `SimulationConfig`, composed of four parameter groups.
@@ -452,6 +480,7 @@ The root model is `SimulationConfig`, composed of four parameter groups.
 | Task arrival model | Poisson | Pu et al. (2025) |
 | Task rate | 2 per minute | Kumar et al. (2023) |
 | Simulation duration | 6,000 seconds (~100 min) | Ullah & Qayyum (2022) |
+| Warm-up period | 1,800 seconds (30 min) | Law (2015) |
 | Urgency distribution | 20% HIGH, 50% MEDIUM, 30% LOW | Li et al. (2025) |
 | Runs per config | 30 | Law (2015) |
 
@@ -492,7 +521,7 @@ The root model is `SimulationConfig`, composed of four parameter groups.
 
 ---
 
-## 8. What Gets Measured
+## 9. What Gets Measured
 
 Each run produces a `SimulationResults` with these metrics:
 
@@ -524,7 +553,7 @@ All tests use α = 0.05 significance level.
 
 ---
 
-## 9. How to Run
+## 10. How to Run
 
 ### Prerequisites
 
@@ -647,7 +676,7 @@ pytest -m "not slow"        # Exclude slow tests
 
 ---
 
-## 10. Spatial Layout
+## 11. Spatial Layout
 
 ```
  0        700  850                                                    3000
@@ -679,7 +708,7 @@ other responders.
 
 ---
 
-## 11. Visualization Reference
+## 12. Visualization Reference
 
 ### Shared Plotting Functions (`src/ercs/visualization/plots.py`)
 
@@ -753,7 +782,7 @@ fig_degradation_lines.png         fig_pred_evolution_baseline.png
 
 ---
 
-## 12. Key Interfaces
+## 13. Key Interfaces
 
 These are the main integration points used by the visualization layer and
 external scripts:

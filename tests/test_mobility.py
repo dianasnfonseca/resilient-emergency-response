@@ -1,10 +1,12 @@
 """
-Tests for Random Waypoint Mobility Model.
+Tests for Role-Based Random Waypoint Mobility Model.
 
 These tests verify that the mobility system correctly implements
-the Random Waypoint model as specified in Chapter1_v2:
-- Speed range: 0-20 m/s
-- Operating zone: Entire simulation area
+the Random Waypoint model with role-based zone constraints:
+- Role assignment: 60% RESCUE, 25% TRANSPORT, 15% LIAISON
+- Zone constraints per role (incident / shuttle / full)
+- Speed ranges per role
+- Backward compatibility when role is None
 - Dynamic edge updates based on proximity (100m range)
 - PRoPHET encounter triggering
 """
@@ -12,13 +14,16 @@ the Random Waypoint model as specified in Chapter1_v2:
 import pytest
 import numpy as np
 
-from ercs.config.parameters import NetworkParameters
+from ercs.config.parameters import NetworkParameters, ResponderRole
 from conftest import RADIO_RANGE_M, SIMULATION_DURATION_S, SPEED_MAX_MPS
 from ercs.network.mobility import (
     MobilityManager,
     MobileNodeState,
     MobilityState,
+    RoleConfig,
+    ROLE_CONFIGS,
     Waypoint,
+    _assign_roles,
     calculate_encounters,
     update_topology_edges,
 )
@@ -327,3 +332,255 @@ class TestMobilityIntegration:
         # Over a full simulation duration (6000s) of random movement,
         # two nodes should meet at some point
         assert encountered, "Nodes never encountered each other in 6000 seconds"
+
+
+# =============================================================================
+# Role-Based Mobility Tests
+# =============================================================================
+
+
+class TestRoleAssignment:
+    """Tests for deterministic role assignment."""
+
+    def test_48_node_distribution(self):
+        """With 48 nodes: 29 RESCUE, 12 TRANSPORT, 7 LIAISON."""
+        roles = _assign_roles(48)
+
+        assert len(roles) == 48
+        assert roles.count(ResponderRole.RESCUE) == 29
+        assert roles.count(ResponderRole.TRANSPORT) == 12
+        assert roles.count(ResponderRole.LIAISON) == 7
+
+    def test_5_node_distribution(self):
+        """With 5 nodes: 3 RESCUE, 1 TRANSPORT, 1 LIAISON."""
+        roles = _assign_roles(5)
+
+        assert roles.count(ResponderRole.RESCUE) == 3
+        assert roles.count(ResponderRole.TRANSPORT) == 1
+        assert roles.count(ResponderRole.LIAISON) == 1
+
+    def test_order_is_rescue_transport_liaison(self):
+        """Roles are assigned in order: RESCUE first, then TRANSPORT, then LIAISON."""
+        roles = _assign_roles(10)
+
+        # First roles should all be RESCUE
+        assert roles[0] == ResponderRole.RESCUE
+        # Last should be LIAISON
+        assert roles[-1] == ResponderRole.LIAISON
+        # Somewhere in the middle should be TRANSPORT
+        assert ResponderRole.TRANSPORT in roles
+
+    def test_single_node(self):
+        """Single node gets RESCUE (round(1*0.6) = 1)."""
+        roles = _assign_roles(1)
+        assert roles == [ResponderRole.RESCUE]
+
+    def test_roles_assigned_during_initialize(self):
+        """Roles are assigned to node states during initialize()."""
+        params = NetworkParameters()
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = [f"mobile_{i}" for i in range(10)]
+        positions = {nid: (100.0, 500.0) for nid in mobile_ids}
+
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        roles = [manager._node_states[nid].role for nid in mobile_ids]
+        # 10 nodes: round(10*0.6)=6 RESCUE, round(10*0.25)=2 TRANSPORT, 2 LIAISON
+        assert roles.count(ResponderRole.RESCUE) == 6
+        assert roles.count(ResponderRole.TRANSPORT) == 2 or roles.count(ResponderRole.TRANSPORT) == 3
+        # Total should match
+        assert len(roles) == 10
+
+
+class TestRoleBasedWaypoints:
+    """Tests for role-aware waypoint generation."""
+
+    @pytest.fixture
+    def params(self) -> NetworkParameters:
+        return NetworkParameters()
+
+    def test_rescue_waypoints_within_incident_zone(self, params: NetworkParameters):
+        """RESCUE nodes generate waypoints only within the incident zone."""
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = [f"mobile_{i}" for i in range(48)]
+        positions = {nid: (350.0, 750.0) for nid in mobile_ids}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        iz = params.incident_zone
+
+        # Check all RESCUE node waypoints
+        for state in manager._node_states.values():
+            if state.role == ResponderRole.RESCUE and state.waypoint is not None:
+                assert iz.origin_x <= state.waypoint.x <= iz.origin_x + iz.width_m, (
+                    f"RESCUE waypoint x={state.waypoint.x} outside incident zone"
+                )
+                assert iz.origin_y <= state.waypoint.y <= iz.origin_y + iz.height_m, (
+                    f"RESCUE waypoint y={state.waypoint.y} outside incident zone"
+                )
+
+    def test_transport_waypoints_shuttle_zones(self, params: NetworkParameters):
+        """TRANSPORT nodes alternate between incident and coordination zones."""
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = [f"mobile_{i}" for i in range(48)]
+        # Start TRANSPORT nodes in the incident zone
+        positions = {nid: (350.0, 750.0) for nid in mobile_ids}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        iz = params.incident_zone
+        cz = params.coordination_zone
+
+        # TRANSPORT nodes starting in incident zone should head to coordination zone
+        for state in manager._node_states.values():
+            if state.role == ResponderRole.TRANSPORT and state.waypoint is not None:
+                wp = state.waypoint
+                in_iz = (
+                    iz.origin_x <= wp.x <= iz.origin_x + iz.width_m
+                    and iz.origin_y <= wp.y <= iz.origin_y + iz.height_m
+                )
+                in_cz = (
+                    cz.origin_x <= wp.x <= cz.origin_x + cz.width_m
+                    and cz.origin_y <= wp.y <= cz.origin_y + cz.height_m
+                )
+                assert in_iz or in_cz, (
+                    f"TRANSPORT waypoint ({wp.x:.0f}, {wp.y:.0f}) "
+                    f"not in incident or coordination zone"
+                )
+
+    def test_liaison_waypoints_full_area(self, params: NetworkParameters):
+        """LIAISON nodes generate waypoints anywhere in the simulation area."""
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = [f"mobile_{i}" for i in range(48)]
+        positions = {nid: (350.0, 750.0) for nid in mobile_ids}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        sa = params.simulation_area
+
+        for state in manager._node_states.values():
+            if state.role == ResponderRole.LIAISON and state.waypoint is not None:
+                assert sa.origin_x <= state.waypoint.x <= sa.origin_x + sa.width_m
+                assert sa.origin_y <= state.waypoint.y <= sa.origin_y + sa.height_m
+
+    def test_rescue_speed_range(self, params: NetworkParameters):
+        """RESCUE nodes have speed in [1, 5] m/s."""
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = [f"mobile_{i}" for i in range(48)]
+        positions = {nid: (350.0, 750.0) for nid in mobile_ids}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        for state in manager._node_states.values():
+            if state.role == ResponderRole.RESCUE and state.waypoint is not None:
+                assert 1.0 <= state.waypoint.speed <= 5.0, (
+                    f"RESCUE speed {state.waypoint.speed} outside [1, 5]"
+                )
+
+    def test_transport_speed_range(self, params: NetworkParameters):
+        """TRANSPORT nodes have speed in [5, 20] m/s."""
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = [f"mobile_{i}" for i in range(48)]
+        positions = {nid: (350.0, 750.0) for nid in mobile_ids}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        for state in manager._node_states.values():
+            if state.role == ResponderRole.TRANSPORT and state.waypoint is not None:
+                assert 5.0 <= state.waypoint.speed <= 20.0, (
+                    f"TRANSPORT speed {state.waypoint.speed} outside [5, 20]"
+                )
+
+    def test_liaison_speed_range(self, params: NetworkParameters):
+        """LIAISON nodes have speed in [1, 10] m/s."""
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = [f"mobile_{i}" for i in range(48)]
+        positions = {nid: (350.0, 750.0) for nid in mobile_ids}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        for state in manager._node_states.values():
+            if state.role == ResponderRole.LIAISON and state.waypoint is not None:
+                assert 1.0 <= state.waypoint.speed <= 10.0, (
+                    f"LIAISON speed {state.waypoint.speed} outside [1, 10]"
+                )
+
+
+class TestBackwardCompatibility:
+    """Tests that role=None falls back to original RWP behaviour."""
+
+    def test_none_role_uses_full_area(self):
+        """Nodes with role=None use the full simulation area."""
+        params = NetworkParameters()
+        manager = MobilityManager(parameters=params)
+
+        mobile_ids = ["mobile_0"]
+        positions = {"mobile_0": (100.0, 500.0)}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        # Override role to None
+        state = manager._node_states["mobile_0"]
+        state.role = None
+        manager._assign_new_waypoint(state)
+
+        sa = params.simulation_area
+        assert sa.origin_x <= state.waypoint.x <= sa.origin_x + sa.width_m
+        assert sa.origin_y <= state.waypoint.y <= sa.origin_y + sa.height_m
+
+    def test_none_role_uses_manager_speed(self):
+        """Nodes with role=None use the MobilityManager's speed range."""
+        params = NetworkParameters()
+        manager = MobilityManager(
+            parameters=params,
+            speed_min=1.0,
+            speed_max=20.0,
+        )
+
+        mobile_ids = ["mobile_0"]
+        positions = {"mobile_0": (100.0, 500.0)}
+        manager.initialize(mobile_ids, positions, random_seed=42)
+
+        state = manager._node_states["mobile_0"]
+        state.role = None
+        manager._assign_new_waypoint(state)
+
+        assert 1.0 <= state.waypoint.speed <= 20.0
+
+
+class TestRoleDeterminism:
+    """Tests that role-based mobility is deterministic with same seed."""
+
+    def test_same_seed_same_roles(self):
+        """Same seed produces identical role assignments."""
+        params = NetworkParameters()
+        ids = [f"mobile_{i}" for i in range(48)]
+        positions = {nid: (350.0, 750.0) for nid in ids}
+
+        m1 = MobilityManager(parameters=params)
+        m1.initialize(ids, positions, random_seed=42)
+
+        m2 = MobilityManager(parameters=params)
+        m2.initialize(ids, positions, random_seed=42)
+
+        for nid in ids:
+            assert m1._node_states[nid].role == m2._node_states[nid].role
+
+    def test_same_seed_same_waypoints(self):
+        """Same seed produces identical initial waypoints."""
+        params = NetworkParameters()
+        ids = [f"mobile_{i}" for i in range(10)]
+        positions = {nid: (350.0, 750.0) for nid in ids}
+
+        m1 = MobilityManager(parameters=params)
+        m1.initialize(ids, positions, random_seed=99)
+
+        m2 = MobilityManager(parameters=params)
+        m2.initialize(ids, positions, random_seed=99)
+
+        for nid in ids:
+            wp1 = m1._node_states[nid].waypoint
+            wp2 = m2._node_states[nid].waypoint
+            assert wp1.x == wp2.x
+            assert wp1.y == wp2.y
+            assert wp1.speed == wp2.speed

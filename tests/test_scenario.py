@@ -559,7 +559,7 @@ class TestPhase3Parameters:
         assert params.simulation_duration_seconds == SIMULATION_DURATION_S
 
     def test_warmup_period(self):
-        """Verify no warm-up period (Grassmann, 2008)."""
+        """Verify warm-up period = 1800s (Law, 2015)."""
         params = ScenarioParameters()
         assert params.warmup_period_seconds == WARMUP_PERIOD_S
 
