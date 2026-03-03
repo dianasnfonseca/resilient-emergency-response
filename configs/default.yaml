@@ -46,13 +46,14 @@ network:
   speed_min_mps: 0.0
   speed_max_mps: 20.0
 
-# Phase 2: Communication Layer (Kumar et al., 2023)
+# Phase 2: Communication Layer — PRoPHETv2 (Grasic et al., 2011)
 communication:
   routing_protocol: prophet
   prophet:
-    p_init: 0.75
-    beta: 0.25
-    gamma: 0.98
+    p_enc_max: 0.5        # Maximum encounter probability
+    i_typ: 1800.0         # Typical inter-encounter interval (seconds)
+    beta: 0.9             # Transitivity constant
+    gamma: 0.999885791    # Aging constant
   message_ttl_seconds: 18000  # 300 minutes
   transmit_speed_bps: 2000000  # 2 Mbps
   update_interval_seconds: 30.0  # Aging time unit (γ^k where k = elapsed/30)

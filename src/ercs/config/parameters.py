@@ -252,30 +252,43 @@ class NetworkParameters(BaseModel):
 
 class PRoPHETParameters(BaseModel):
     """
-    PRoPHET protocol parameters.
+    PRoPHETv2 protocol parameters.
 
-    Source: Kumar et al. (2023) - IETF draft standard values
+    PRoPHETv2 replaces the original PRoPHET encounter equation with a
+    time-based P_enc calculation and uses MAX-based transitivity to prevent
+    delivery predictability saturation.
+
+    Sources:
+        - Grasic et al. (2011): PRoPHETv2 specification (CHANTS '11)
+        - Lindgren et al. (2012): RFC 6693
     """
 
-    p_init: float = Field(
-        default=0.75,
+    p_enc_max: float = Field(
+        default=0.5,
         gt=0,
         le=1,
-        description="Initial predictability (P_init). Source: Kumar et al. (2023)",
+        description="Maximum encounter probability. Source: Grasic et al. (2011)",
+    )
+
+    i_typ: float = Field(
+        default=1800.0,
+        gt=0,
+        description="Typical inter-encounter interval in seconds. "
+        "Source: Grasic et al. (2011)",
     )
 
     beta: float = Field(
-        default=0.25,
+        default=0.9,
         gt=0,
         le=1,
-        description="Transitivity scaling (β). Source: Kumar et al. (2023)",
+        description="Transitivity constant (β). Source: Grasic et al. (2011)",
     )
 
     gamma: float = Field(
-        default=0.98,
+        default=0.999885791,
         gt=0,
         lt=1,
-        description="Aging constant (γ). Source: Kumar et al. (2023)",
+        description="Aging constant (γ). Source: Grasic et al. (2011)",
     )
 
 
@@ -284,7 +297,7 @@ class CommunicationParameters(BaseModel):
     Phase 2: Communication Layer Parameters.
 
     Sources:
-        - Kumar et al. (2023): PRoPHET protocol parameters
+        - Grasic et al. (2011): PRoPHETv2 protocol parameters
         - Ullah & Qayyum (2022): Message TTL, transmit speed, buffer policy
         - Castillo et al. (2024): Protocol selection rationale
     """
@@ -296,7 +309,7 @@ class CommunicationParameters(BaseModel):
 
     prophet: PRoPHETParameters = Field(
         default_factory=PRoPHETParameters,
-        description="PRoPHET protocol parameters",
+        description="PRoPHETv2 protocol parameters",
     )
 
     message_ttl_seconds: int = Field(

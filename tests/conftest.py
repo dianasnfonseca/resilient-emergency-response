@@ -45,15 +45,19 @@ CONNECTIVITY_SEVERE = 0.20
 SPEED_MAX_MPS = 20.0
 
 # =============================================================================
-# Phase 2: Communication / PRoPHET (Kumar et al., 2023)
+# Phase 2: Communication / PRoPHETv2 (Grasic et al., 2011)
 # =============================================================================
 
-P_INIT = 0.75
-BETA = 0.25
-GAMMA = 0.98
+P_ENC_MAX = 0.5
+I_TYP = 1800.0
+BETA = 0.9
+GAMMA = 0.999885791
 MESSAGE_TTL_S = 18_000  # 300 minutes
 TRANSMIT_SPEED_BPS = 2_000_000
 AGING_INTERVAL_S = 30.0
+
+# Legacy alias kept for tests that still reference P_INIT
+P_INIT = P_ENC_MAX
 
 # =============================================================================
 # Phase 3: Scenario Generation

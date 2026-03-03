@@ -147,9 +147,10 @@ def build_parameter_tables(
     ]
 
     prophet_data = [
-        ("P_init", f"{config.communication.prophet.p_init}", "Kumar et al. (2023)"),
-        ("\u03b2 (transitivity)", f"{config.communication.prophet.beta}", "Kumar et al. (2023)"),
-        ("\u03b3 (aging)", f"{config.communication.prophet.gamma}", "Kumar et al. (2023)"),
+        ("P_enc_max", f"{config.communication.prophet.p_enc_max}", "Grasic et al. (2011)"),
+        ("I_typ", f"{config.communication.prophet.i_typ:.0f} s", "Grasic et al. (2011)"),
+        ("\u03b2 (transitivity)", f"{config.communication.prophet.beta}", "Grasic et al. (2011)"),
+        ("\u03b3 (aging)", f"{config.communication.prophet.gamma}", "Grasic et al. (2011)"),
         ("Message TTL", f"{config.communication.message_ttl_seconds // 60} min", "Ullah & Qayyum (2022)"),
         ("Transmit speed", f"{config.communication.transmit_speed_bps / 1_000_000:.0f} Mbps", "Ullah & Qayyum (2022)"),
         ("Buffer drop policy", config.communication.buffer_drop_policy.value.replace("_", " ").title(), "Ullah & Qayyum (2022)"),

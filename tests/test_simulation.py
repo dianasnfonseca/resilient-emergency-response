@@ -671,10 +671,10 @@ class TestConnectionUpEncounters:
         # Initially P = 0
         assert comm.get_delivery_predictability("A", "B") == 0.0
 
-        # process_encounter should set P = P_init = 0.75
+        # process_encounter should set P = P_enc_max = 0.5 (PRoPHETv2)
         comm.process_encounter("A", "B", current_time=0.0)
 
-        assert comm.get_delivery_predictability("A", "B") == pytest.approx(0.75)
+        assert comm.get_delivery_predictability("A", "B") == pytest.approx(0.5)
 
     def test_sustained_contact_does_not_re_trigger_encounter(self):
         """Engine should not re-trigger PRoPHET encounter for sustained links."""
@@ -738,10 +738,10 @@ class TestConnectionUpEncounters:
             node_ids=["A", "B"],
         )
 
-        # First encounter
+        # First encounter (PRoPHETv2: P_enc_max = 0.5)
         comm.process_encounter("A", "B", current_time=0.0)
         p_first = comm.get_delivery_predictability("A", "B")
-        assert p_first == pytest.approx(0.75)
+        assert p_first == pytest.approx(0.5)
 
         # Simulate time passing + aging (nodes out of range)
         comm.predictability.age_predictabilities("A", current_time=300.0)

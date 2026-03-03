@@ -99,9 +99,10 @@ with st.sidebar:
         - **Buffer:** {config.network.buffer_size_bytes / 1_048_576:.0f} MB
         """)
 
-    with st.expander("PRoPHET Protocol"):
+    with st.expander("PRoPHETv2 Protocol"):
         st.markdown(f"""
-        - **P_init:** {config.communication.prophet.p_init}
+        - **P_enc_max:** {config.communication.prophet.p_enc_max}
+        - **I_typ:** {config.communication.prophet.i_typ:.0f} s
         - **\u03b2:** {config.communication.prophet.beta}
         - **\u03b3:** {config.communication.prophet.gamma}
         - **TTL:** {config.communication.message_ttl_seconds // 60} min

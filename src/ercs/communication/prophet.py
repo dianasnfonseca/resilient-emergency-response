@@ -1,22 +1,23 @@
 """
-PRoPHET-Inspired Communication Layer (Phase 2).
+PRoPHETv2 Communication Layer (Phase 2).
 
-This module implements store-and-forward message delivery with PRoPHET-inspired
+This module implements store-and-forward message delivery with PRoPHETv2
 forwarding logic for delay-tolerant networking in emergency coordination.
 
-PRoPHET (Probabilistic Routing Protocol using History of Encounters and Transitivity)
-uses delivery predictability values to make forwarding decisions:
-- Predictability increases when nodes encounter each other
-- Predictability ages (decays) over time
-- Transitivity: if A meets B and B can reach C, A gains some predictability to C
+PRoPHETv2 (Grasic et al., 2011) extends the original PRoPHET protocol with:
+- Time-based encounter updates (P_enc depends on inter-encounter interval)
+- MAX-based transitivity (prevents delivery predictability saturation)
+- Greater-or-equal forwarding condition
 
 Key equations:
-    P(a,b) = P(a,b)_old + (1 - P(a,b)_old) × P_init   [encounter update]
+    P_enc = P_enc_max × min(1, Δt / I_typ)             [time-based encounter]
+    P(a,b) = P(a,b)_old + (1 - P(a,b)_old) × P_enc    [encounter update]
     P(a,b) = P(a,b)_old × γ^k                          [aging, k = time units]
-    P(a,c) = P(a,c)_old + (1 - P(a,c)_old) × P(a,b) × P(b,c) × β   [transitivity]
+    P(a,c) = max(P(a,c)_old, P(a,b) × P(b,c) × β)     [MAX transitivity]
 
 Sources:
-    - Kumar et al. (2023): PRoPHET protocol parameters (P_init=0.75, β=0.25, γ=0.98)
+    - Grasic et al. (2011): PRoPHETv2 specification (CHANTS '11)
+    - Lindgren et al. (2012): RFC 6693
     - Ullah & Qayyum (2022): Message TTL (300 min), transmit speed (2 Mbps), drop-oldest
     - Castillo et al. (2024): PRoPHET selection rationale
 """
@@ -350,21 +351,28 @@ class MessageBuffer:
 
 class DeliveryPredictabilityMatrix:
     """
-    Manages delivery predictability values for PRoPHET routing.
+    Manages delivery predictability values for PRoPHETv2 routing.
 
     Each node maintains P(a,b) values representing the probability that
     node 'a' can successfully deliver a message to destination 'b'.
 
+    PRoPHETv2 (Grasic et al., 2011) differs from original PRoPHET:
+    1. Time-based encounter: P_enc depends on inter-encounter interval
+    2. MAX-based transitivity: prevents saturation to ~1.0
+    3. Greater-or-equal forwarding condition
+
     Predictability updates occur:
-    1. On encounter: P increases when nodes meet
+    1. On encounter: P increases (time-scaled P_enc)
     2. Aging: P decays over time when no encounters
-    3. Transitivity: If A meets B, A gains some of B's predictabilities
+    3. Transitivity: MAX(P_old, P(a,b) × P(b,c) × β)
 
     Sources:
-        - Kumar et al. (2023): P_init=0.75, β=0.25, γ=0.98
+        - Grasic et al. (2011): PRoPHETv2 (P_enc_max=0.5, β=0.9, γ=0.999885791)
+        - Lindgren et al. (2012): RFC 6693
 
     Attributes:
-        p_init: Initial predictability on first encounter
+        p_enc_max: Maximum encounter probability
+        i_typ: Typical inter-encounter interval (seconds)
         beta: Transitivity scaling constant
         gamma: Aging constant (applied per time unit)
         update_interval: Time units between aging updates
@@ -372,22 +380,26 @@ class DeliveryPredictabilityMatrix:
 
     def __init__(
         self,
-        p_init: float = 0.75,
-        beta: float = 0.25,
-        gamma: float = 0.98,
-        update_interval: float = 0.1,
+        p_enc_max: float = 0.5,
+        i_typ: float = 1800.0,
+        beta: float = 0.9,
+        gamma: float = 0.999885791,
+        update_interval: float = 30.0,
     ):
         """
-        Initialise the predictability matrix.
+        Initialise the predictability matrix with PRoPHETv2 parameters.
 
         Args:
-            p_init: Initial predictability constant (default: 0.75)
-            beta: Transitivity scaling constant (default: 0.25)
-            gamma: Aging constant (default: 0.98)
-            update_interval: Time units for aging (default: 0.1)
+            p_enc_max: Maximum encounter probability (default: 0.5)
+            i_typ: Typical inter-encounter interval in seconds (default: 1800.0)
+            beta: Transitivity scaling constant (default: 0.9)
+            gamma: Aging constant (default: 0.999885791)
+            update_interval: Time units for aging (default: 30.0)
         """
-        if not (0 < p_init <= 1):
-            raise ValueError(f"p_init must be in (0, 1], got {p_init}")
+        if not (0 < p_enc_max <= 1):
+            raise ValueError(f"p_enc_max must be in (0, 1], got {p_enc_max}")
+        if i_typ <= 0:
+            raise ValueError(f"i_typ must be positive, got {i_typ}")
         if not (0 < beta <= 1):
             raise ValueError(f"beta must be in (0, 1], got {beta}")
         if not (0 < gamma < 1):
@@ -395,7 +407,8 @@ class DeliveryPredictabilityMatrix:
         if update_interval <= 0:
             raise ValueError(f"update_interval must be positive, got {update_interval}")
 
-        self.p_init = p_init
+        self.p_enc_max = p_enc_max
+        self.i_typ = i_typ
         self.beta = beta
         self.gamma = gamma
         self.update_interval = update_interval
@@ -405,6 +418,9 @@ class DeliveryPredictabilityMatrix:
 
         # Track last aging time per node
         self._last_aging_time: dict[str, float] = {}
+
+        # PRoPHETv2: track last encounter time per directed node pair
+        self._last_encounter_time: dict[tuple[str, str], float] = {}
 
     def get_predictability(self, node_id: str, destination_id: str) -> float:
         """
@@ -424,37 +440,85 @@ class DeliveryPredictabilityMatrix:
             self._matrix[node_id] = {}
         self._matrix[node_id][destination_id] = min(max(value, 0.0), 1.0)
 
-    def update_encounter(self, node_a: str, node_b: str) -> None:
+    def _calculate_p_enc(self, node_a: str, node_b: str, current_time: float) -> float:
         """
-        Update predictability when two nodes encounter each other.
+        Calculate time-based encounter probability P_enc (PRoPHETv2 Eq. 1).
 
-        Applies the PRoPHET encounter equation:
-            P(a,b) = P(a,b)_old + (1 - P(a,b)_old) × P_init
+        If this is the first encounter, P_enc = P_enc_max.
+        If time since last encounter < I_typ, P_enc is scaled down.
+        Otherwise, P_enc = P_enc_max.
 
-        This is applied symmetrically: both nodes update their predictability
-        to each other.
+        Source: Grasic et al. (2011), Section 3.1
 
         Args:
             node_a: First node in encounter
             node_b: Second node in encounter
+            current_time: Current simulation time
+
+        Returns:
+            Calculated P_enc value
+        """
+        key = (node_a, node_b)
+        last_enc_time = self._last_encounter_time.get(key, 0.0)
+
+        if last_enc_time == 0.0:
+            # First encounter
+            return self.p_enc_max
+
+        delta_t = current_time - last_enc_time
+        if delta_t < self.i_typ:
+            # Recent encounter — reduce P_enc proportionally
+            return self.p_enc_max * (delta_t / self.i_typ)
+
+        # Long time since last encounter — use full P_enc
+        return self.p_enc_max
+
+    def update_encounter(
+        self, node_a: str, node_b: str, current_time: float
+    ) -> None:
+        """
+        Update predictability when two nodes encounter each other.
+
+        Applies the PRoPHETv2 time-based encounter equation:
+            P_enc = P_enc_max × min(1, Δt / I_typ)
+            P(a,b) = P(a,b)_old + (1 - P(a,b)_old) × P_enc
+
+        This is applied symmetrically: both nodes update their predictability
+        to each other.
+
+        Source: Grasic et al. (2011), Section 3.1
+
+        Args:
+            node_a: First node in encounter
+            node_b: Second node in encounter
+            current_time: Current simulation time
         """
         # Update A's predictability to B
+        p_enc_ab = self._calculate_p_enc(node_a, node_b, current_time)
         p_old_ab = self.get_predictability(node_a, node_b)
-        p_new_ab = p_old_ab + (1 - p_old_ab) * self.p_init
+        p_new_ab = p_old_ab + (1 - p_old_ab) * p_enc_ab
         self.set_predictability(node_a, node_b, p_new_ab)
+        self._last_encounter_time[(node_a, node_b)] = current_time
 
         # Update B's predictability to A
+        p_enc_ba = self._calculate_p_enc(node_b, node_a, current_time)
         p_old_ba = self.get_predictability(node_b, node_a)
-        p_new_ba = p_old_ba + (1 - p_old_ba) * self.p_init
+        p_new_ba = p_old_ba + (1 - p_old_ba) * p_enc_ba
         self.set_predictability(node_b, node_a, p_new_ba)
+        self._last_encounter_time[(node_b, node_a)] = current_time
 
     def update_transitivity(self, node_a: str, node_b: str) -> None:
         """
-        Update predictabilities through transitivity.
+        Update predictabilities through transitivity (PRoPHETv2 MAX-based).
 
         When A meets B, A can potentially reach destinations that B can reach.
-        Applies the PRoPHET transitivity equation:
-            P(a,c) = P(a,c)_old + (1 - P(a,c)_old) × P(a,b) × P(b,c) × β
+        PRoPHETv2 uses MAX instead of additive formula:
+            P(a,c) = max(P(a,c)_old, P(a,b) × P(b,c) × β)
+
+        This prevents the delivery predictability saturation problem where
+        all P values converge to ~1.0 under original PRoPHET.
+
+        Source: Grasic et al. (2011), Section 3.2
 
         This is applied symmetrically for both nodes.
 
@@ -469,7 +533,7 @@ class DeliveryPredictabilityMatrix:
         self._apply_transitivity(node_b, node_a)
 
     def _apply_transitivity(self, receiver: str, giver: str) -> None:
-        """Apply transitivity from giver to receiver."""
+        """Apply MAX-based transitivity from giver to receiver (PRoPHETv2)."""
         if giver not in self._matrix:
             return
 
@@ -480,14 +544,17 @@ class DeliveryPredictabilityMatrix:
                 continue  # Skip self-referential
 
             p_old = self.get_predictability(receiver, dest)
-            p_new = p_old + (1 - p_old) * p_receiver_giver * p_giver_dest * self.beta
-            self.set_predictability(receiver, dest, p_new)
+            p_new = p_receiver_giver * p_giver_dest * self.beta
+
+            # PRoPHETv2: use MAX instead of additive formula
+            if p_new > p_old:
+                self.set_predictability(receiver, dest, p_new)
 
     def age_predictabilities(self, node_id: str, current_time: float) -> None:
         """
         Age all predictabilities for a node based on elapsed time.
 
-        Applies the PRoPHET aging equation:
+        Applies the aging equation (same formula, PRoPHETv2 gamma):
             P(a,b) = P(a,b)_old × γ^k
 
         Where k is the number of time units since last aging.
@@ -543,7 +610,7 @@ class DeliveryPredictabilityMatrix:
         Find the best forwarding candidate for a message.
 
         Returns the candidate with highest predictability to the destination,
-        but only if that predictability is higher than the current node's.
+        but only if that predictability is >= the current node's (PRoPHETv2).
 
         Args:
             current_node: Node currently holding the message
@@ -566,7 +633,7 @@ class DeliveryPredictabilityMatrix:
                 return candidate
 
             p = self.get_predictability(candidate, destination)
-            if p > best_p:
+            if p >= best_p and p > 0:
                 best_p = p
                 best_candidate = candidate
 
@@ -583,6 +650,7 @@ class DeliveryPredictabilityMatrix:
         """Reset all predictability values."""
         self._matrix.clear()
         self._last_aging_time.clear()
+        self._last_encounter_time.clear()
 
     @property
     def node_count(self) -> int:
@@ -604,19 +672,19 @@ class TransmissionResult:
 
 class CommunicationLayer:
     """
-    Main communication layer implementing PRoPHET-inspired routing.
+    Main communication layer implementing PRoPHETv2 routing.
 
     Manages message buffers, delivery predictability, and forwarding decisions
     for all nodes in the network.
 
     This layer provides:
     - Store-and-forward message handling
-    - Delivery predictability matrix
-    - Forwarding decisions based on PRoPHET logic
+    - PRoPHETv2 delivery predictability matrix
+    - Forwarding decisions based on PRoPHETv2 logic (>= condition)
     - Buffer management with drop-oldest policy
 
     Sources:
-        - Kumar et al. (2023): PRoPHET parameters
+        - Grasic et al. (2011): PRoPHETv2 parameters
         - Ullah & Qayyum (2022): Message handling, buffer policy
     """
 
@@ -637,9 +705,10 @@ class CommunicationLayer:
         self.comm_params = comm_params
         self.network_params = network_params
 
-        # Create predictability matrix
+        # Create predictability matrix (PRoPHETv2)
         self.predictability = DeliveryPredictabilityMatrix(
-            p_init=comm_params.prophet.p_init,
+            p_enc_max=comm_params.prophet.p_enc_max,
+            i_typ=comm_params.prophet.i_typ,
             beta=comm_params.prophet.beta,
             gamma=comm_params.prophet.gamma,
             update_interval=comm_params.update_interval_seconds,
@@ -736,8 +805,8 @@ class CommunicationLayer:
         self.predictability.age_predictabilities(node_a, current_time)
         self.predictability.age_predictabilities(node_b, current_time)
 
-        # Then update predictability from encounter
-        self.predictability.update_encounter(node_a, node_b)
+        # Then update predictability from encounter (PRoPHETv2: time-based)
+        self.predictability.update_encounter(node_a, node_b, current_time)
         self.predictability.update_transitivity(node_a, node_b)
 
         # Exchange messages A -> B
@@ -796,11 +865,11 @@ class CommunicationLayer:
                 messages_to_transfer.append((message, "direct"))
                 continue
 
-            # Check if forwarding is beneficial
+            # Check if forwarding is beneficial (PRoPHETv2: >= instead of >)
             p_from = self.predictability.get_predictability(from_node, dest)
             p_to = self.predictability.get_predictability(to_node, dest)
 
-            if p_to > p_from:
+            if p_to >= p_from and p_to > 0:
                 messages_to_transfer.append((message, "forward"))
 
         # Transfer messages

@@ -205,41 +205,44 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
     print(f"  CommunicationLayer passes: comm_params.update_interval_seconds = {comm.update_interval_seconds}")
 
     # 2b. Manual aging test
-    subheader("2b. Manual Aging Test (P_init=0.75, γ=0.98, interval=30s)")
+    subheader("2b. Manual Aging Test (P_enc_max=0.5, γ=0.999885791, interval=30s)")
 
     matrix = DeliveryPredictabilityMatrix(
-        p_init=comm.prophet.p_init,
+        p_enc_max=comm.prophet.p_enc_max,
+        i_typ=comm.prophet.i_typ,
         beta=comm.prophet.beta,
         gamma=comm.prophet.gamma,
         update_interval=comm.update_interval_seconds,
     )
     matrix.initialise_node("A", current_time=0.0)
-    matrix.set_predictability("A", "B", 0.75)
+    matrix.set_predictability("A", "B", 0.5)
 
     test_times = [10, 20, 30, 60, 300, 600, 1800]
     for t in test_times:
         # Reset for each test
         matrix2 = DeliveryPredictabilityMatrix(
-            p_init=comm.prophet.p_init,
+            p_enc_max=comm.prophet.p_enc_max,
+            i_typ=comm.prophet.i_typ,
             beta=comm.prophet.beta,
             gamma=comm.prophet.gamma,
             update_interval=comm.update_interval_seconds,
         )
         matrix2.initialise_node("A", current_time=0.0)
-        matrix2.set_predictability("A", "B", 0.75)
+        matrix2.set_predictability("A", "B", 0.5)
         matrix2.age_predictabilities("A", float(t))
         p = matrix2.get_predictability("A", "B")
         k = t / comm.update_interval_seconds
-        expected = 0.75 * comm.prophet.gamma ** k if k >= 1 else 0.75
+        expected = 0.5 * comm.prophet.gamma ** k if k >= 1 else 0.5
         status = "OK" if abs(p - expected) < 0.001 else "MISMATCH!"
         print(f"  t={t:5d}s: k={k:6.1f}  P={p:.6f}  expected={expected:.6f}  {status}")
 
-    # 2c. Aging vs encounter race condition
-    subheader("2c. Aging vs Encounter Race (10s encounter interval, 30s aging interval)")
+    # 2c. Aging vs encounter race condition (PRoPHETv2 time-based)
+    subheader("2c. PRoPHETv2 Encounter Saturation Test (10s interval, 30s aging)")
     print("  Simulating: encounter every 10s, aging applied at each encounter")
 
     matrix3 = DeliveryPredictabilityMatrix(
-        p_init=comm.prophet.p_init,
+        p_enc_max=comm.prophet.p_enc_max,
+        i_typ=comm.prophet.i_typ,
         beta=comm.prophet.beta,
         gamma=comm.prophet.gamma,
         update_interval=comm.update_interval_seconds,
@@ -250,7 +253,7 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
     for t in range(0, 1801, 10):
         # This is what process_encounter does: age then encounter
         matrix3.age_predictabilities("A", float(t))
-        matrix3.update_encounter("A", "B")
+        matrix3.update_encounter("A", "B", float(t))
         p = matrix3.get_predictability("A", "B")
         p_history.append((t, p))
 
@@ -260,14 +263,20 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
         if t in sample_times:
             print(f"    t={t:5d}s: P(A,B) = {p:.6f}")
 
-    print(f"\n  Final P after 1800s of encounters every 10s: {p_history[-1][1]:.6f}")
-    print(f"  P has been > 0.99 since t={next(t for t, p in p_history if p > 0.99)}s")
+    final_p = p_history[-1][1]
+    print(f"\n  Final P after 1800s of encounters every 10s: {final_p:.6f}")
+    high_p = [t for t, p in p_history if p > 0.9]
+    if high_p:
+        print(f"  P exceeded 0.9 at t={high_p[0]}s")
+    else:
+        print(f"  P never exceeded 0.9 — PRoPHETv2 anti-saturation working!")
 
     # 2d. What if encounters are less frequent?
-    subheader("2d. Encounter Frequency Sensitivity")
+    subheader("2d. Encounter Frequency Sensitivity (PRoPHETv2)")
     for interval in [10, 30, 60, 120, 300, 600]:
         m = DeliveryPredictabilityMatrix(
-            p_init=comm.prophet.p_init,
+            p_enc_max=comm.prophet.p_enc_max,
+            i_typ=comm.prophet.i_typ,
             beta=comm.prophet.beta,
             gamma=comm.prophet.gamma,
             update_interval=comm.update_interval_seconds,
@@ -275,7 +284,7 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
         m.initialise_node("A", current_time=0.0)
         for t in range(0, 1801, interval):
             m.age_predictabilities("A", float(t))
-            m.update_encounter("A", "B")
+            m.update_encounter("A", "B", float(t))
         p = m.get_predictability("A", "B")
         n_encounters = 1800 // interval + 1
         print(f"  Encounter every {interval:4d}s ({n_encounters:3d} total): P = {p:.6f}")
@@ -685,7 +694,8 @@ def main():
     print(f"Config: warmup={config.scenario.warmup_period_seconds}s, "
           f"duration={config.scenario.simulation_duration_seconds}s, "
           f"total={config.total_simulation_duration}s")
-    print(f"PRoPHET: P_init={config.communication.prophet.p_init}, "
+    print(f"PRoPHETv2: P_enc_max={config.communication.prophet.p_enc_max}, "
+          f"I_typ={config.communication.prophet.i_typ}, "
           f"β={config.communication.prophet.beta}, "
           f"γ={config.communication.prophet.gamma}, "
           f"update_interval={config.communication.update_interval_seconds}s")
