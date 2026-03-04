@@ -520,8 +520,7 @@ class TestAdaptiveGeographicClustering:
         the closer node wins when P differences are moderate because β=0.7
         heavily weights proximity.
 
-        P values chosen so mean_P = (0.32+0.37+0.42)/3 = 0.37 → moderate
-        regime → α=0.3, β=0.7 (dynamic weight selection).
+        Static weights α=0.3, β=0.7.
         """
         task = _make_task("t_0", 10.0, x=300.0, y=300.0)
 
@@ -532,7 +531,7 @@ class TestAdaptiveGeographicClustering:
         }
         locator = StubResponderLocator(positions)
 
-        # All above 0.3 threshold; mean_P = 0.37 → moderate regime (α=0.3)
+        # All above 0.3 threshold; static α=0.3, β=0.7
         net = StubNetworkState({
             ("coord_0", "r_close"): 0.32,
             ("coord_0", "r_moderate"): 0.37,

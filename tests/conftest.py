@@ -82,12 +82,9 @@ COORDINATION_INTERVAL_S = 1_800  # 30 minutes (Kaji et al., 2025)
 PRIORITY_LEVELS = 3
 PATH_THRESHOLD = 0.3
 
-# Dynamic weight regimes (Boondirek et al., 2014; Rosas et al., 2020)
-WEIGHT_ALPHA_GOOD = 0.4
-WEIGHT_ALPHA_MODERATE = 0.3
-WEIGHT_ALPHA_SEVERE = 0.1
-P_THRESHOLD_GOOD = 0.40
-P_THRESHOLD_MODERATE = 0.30
+# Static scoring weights (Boondirek et al., 2014)
+PREDICTABILITY_WEIGHT = 0.3
+PROXIMITY_WEIGHT = 0.7
 
 # =============================================================================
 # Experiment 

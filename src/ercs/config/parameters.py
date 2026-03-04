@@ -478,45 +478,21 @@ class CoordinationParameters(BaseModel):
         "nodes stabilise at P ≈ 0.05–0.20. Source: Ullah & Qayyum (2022) SAAD",
     )
 
-    # Dynamic weight regimes (Boondirek et al., 2014; Rosas et al., 2020)
-    weight_alpha_good: float = Field(
-        default=0.4,
-        ge=0,
-        le=1,
-        description="α when mean_P > p_threshold_good. "
-        "Source: Boondirek et al. (2014); Rosas et al. (2020)",
-    )
-
-    weight_alpha_moderate: float = Field(
+    # Static scoring weights (Boondirek et al., 2014)
+    predictability_weight: float = Field(
         default=0.3,
         ge=0,
         le=1,
-        description="α when p_threshold_moderate <= mean_P <= p_threshold_good. "
-        "Source: Boondirek et al. (2014); Rosas et al. (2020)",
+        description="α — predictability weight in scoring formula. "
+        "Source: Boondirek et al. (2014) DiPRoPHET",
     )
 
-    weight_alpha_severe: float = Field(
-        default=0.1,
+    proximity_weight: float = Field(
+        default=0.7,
         ge=0,
         le=1,
-        description="α when mean_P < p_threshold_moderate. "
-        "Source: Boondirek et al. (2014); Rosas et al. (2020)",
-    )
-
-    p_threshold_good: float = Field(
-        default=0.40,
-        ge=0,
-        le=1,
-        description="mean_P above this → good connectivity regime. "
-        "Source: Rosas et al. (2020)",
-    )
-
-    p_threshold_moderate: float = Field(
-        default=0.30,
-        ge=0,
-        le=1,
-        description="mean_P at or above this → moderate connectivity regime. "
-        "Source: Rosas et al. (2020)",
+        description="β — proximity weight in scoring formula (β = 1 − α). "
+        "Source: Boondirek et al. (2014) DiPRoPHET",
     )
 
     proximity_method: Literal["euclidean"] = Field(
