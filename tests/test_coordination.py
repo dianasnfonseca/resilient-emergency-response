@@ -120,12 +120,12 @@ def full_connectivity_network() -> MockNetworkState:
 def partial_connectivity_network() -> MockNetworkState:
     """Create network state with partial connectivity."""
     network = MockNetworkState()
-    # Only some responders reachable
+    # Only some responders reachable (P > 0.3 threshold)
     network.set_predictability("coord_0", "mobile_0", P_INIT)
     network.set_predictability("coord_0", "mobile_1", 0.50)
     network.set_predictability("coord_0", "mobile_2", 0.0)  # Not reachable
     network.set_predictability("coord_0", "mobile_3", 0.0)  # Not reachable
-    network.set_predictability("coord_0", "mobile_4", 0.25)
+    network.set_predictability("coord_0", "mobile_4", 0.40)
     return network
 
 
@@ -887,7 +887,7 @@ class TestPhase4Parameters:
         assert params.priority_levels == PRIORITY_LEVELS
 
     def test_path_threshold(self):
-        """Verify path threshold = 0 (Ullah & Qayyum, 2022)."""
+        """Verify path threshold = 0.3 (Ullah & Qayyum, 2022 SAAD)."""
         params = CoordinationParameters()
         assert params.available_path_threshold == PATH_THRESHOLD
 

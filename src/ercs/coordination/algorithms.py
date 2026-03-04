@@ -12,15 +12,19 @@ The coordination layer provides:
 - Event logging for performance metric collection
 
 Key differences between algorithms:
-- Adaptive: considers communication path availability (P > 0)
+- Adaptive: considers communication path availability (P > 0.3 threshold)
+- Adaptive: dynamically adjusts α/β weights based on mean candidate P
 - Adaptive: prioritises high-urgency tasks
 - Baseline: assigns to nearest responder regardless of connectivity
 - Baseline: processes tasks in creation order (FCFS)
 
 Sources:
+    - Rosas et al. (2020): Adaptive weight adjustment for DTN routing
+    - Boondirek et al. (2014): Distance-dominant weighting (DiPRoPHET)
+    - Cui et al. (2022): Workload-aware scoring (AdaptiveSpray)
     - Kaji et al. (2025): Distributed architecture, 30-minute update interval
     - Rosas et al. (2023): Three priority levels
-    - Ullah & Qayyum (2022): P > 0 threshold for path availability
+    - Ullah & Qayyum (2022): P > threshold for path availability
     - Keykhaei et al. (2024): Euclidean distance for proximity
     - Oksuz & Satoglu (2024): Urgency-based prioritisation
     - Cabral et al. (2018): 30-minute response time standard
@@ -40,11 +44,23 @@ from ercs.config.parameters import (
 )
 from ercs.scenario.generator import Task
 
-# Weighted score parameters for adaptive algorithm
-# Equal weights represent neutral balance between predictability and proximity
-# Following multi-criteria approaches in DTN protocols (Kumar et al., 2023)
-PREDICTABILITY_WEIGHT = 0.5  # α
-PROXIMITY_WEIGHT = 0.5  # β
+# Static fallback weights (used by existing tests that import these constants).
+# In production the AdaptiveCoordinator selects α dynamically based on mean_P
+# of the eligible candidate set; β = 1 − α.
+# Source: Boondirek et al. (2014) DiPRoPHET (ICUIMC) — distance as dominant criterion
+PREDICTABILITY_WEIGHT = 0.3  # α (moderate-connectivity default)
+PROXIMITY_WEIGHT = 0.7  # β (moderate-connectivity default)
+
+# Workload penalty weight — discourages re-assigning the same responder
+# across consecutive coordination cycles, preventing node overload.
+# Source: Cui et al. (2022) AdaptiveSpray (China Communications)
+WORKLOAD_PENALTY_WEIGHT = 0.2  # λ
+
+# Fixed denominator for distance normalisation — the simulation area diagonal
+# sqrt(3000² + 1500²) ≈ 3354.1 m.  Using a fixed denominator avoids the
+# relative normalisation problem where D_norm = 1.0 for the closest candidate
+# even when all candidates are far from the task.
+SIMULATION_AREA_DIAGONAL_M = 3354.1
 
 
 class NetworkStateProvider(Protocol):
@@ -306,21 +322,31 @@ class AdaptiveCoordinator(CoordinatorBase):
 
     The adaptive algorithm:
     1. Processes tasks in urgency order (High > Medium > Low)
-    2. Considers only responders with available communication paths (P > 0)
-    3. Calculates a weighted score combining predictability and proximity
-    4. Selects the responder with highest combined score
+    2. Considers only responders with available communication paths (P > 0.3)
+    3. Infers current network quality from mean P of eligible candidates
+    4. Selects (α, β) dynamically based on three connectivity regimes
+    5. Calculates a weighted score combining predictability and proximity
+    6. Selects the responder with highest combined score
 
-    The weighted score balances message deliverability (network-awareness) with
-    response effectiveness (responder proximity). This follows multi-criteria
-    approaches in DTN protocol extensions (Kumar et al., 2023 - EPP).
+    Score = α × P_abs + β × D_norm − λ × W_penalty
 
-    Score = α × P_norm + β × D_norm, where α = β = 0.5
+    - P_abs: absolute delivery predictability (already in [0, 1])
+    - D_norm: 1 - (distance / area_diagonal), using the fixed simulation diagonal
+    - W_penalty: 1 if the responder was assigned in the prior cycle, else 0
+    - λ = 0.2 (workload penalty)
+
+    Dynamic weight regimes (based on mean P of eligible candidates):
+    - Good    (mean_P > 0.40): α = 0.4, β = 0.6 — P has discriminating power
+    - Moderate (0.30 ≤ mean_P ≤ 0.40): α = 0.3, β = 0.7 — balanced
+    - Severe  (mean_P < 0.30): α = 0.1, β = 0.9 — proximity dominates
 
     Sources:
-        - Kaji et al. (2025): Urgency-first prioritisation
-        - Ullah & Qayyum (2022): P > 0 threshold, predictability-based selection
-        - Kumar et al. (2023): EPP weighted multi-criteria approach
-        - Oksuz & Satoglu (2024): Urgency-based allocation
+        - Rosas et al. (2020): Adaptive weight adjustment for DTN routing
+        - Boondirek et al. (2014): Distance-dominant weighting (DiPRoPHET)
+        - Shah & Ahmed (2025): Absolute DP values (SN Computer Science)
+        - Cui et al. (2022): Workload-aware scoring (AdaptiveSpray)
+        - Kaji et al. (2025): Urgency-first prioritisation, 30-min interval
+        - Ullah & Qayyum (2022): P > threshold, predictability-based selection
     """
 
     def __init__(self, params: CoordinationParameters | None = None):
@@ -333,6 +359,14 @@ class AdaptiveCoordinator(CoordinatorBase):
             UrgencyLevel.MEDIUM: 1,
             UrgencyLevel.LOW: 2,
         }
+
+        # Dynamic weight regime counters (for diagnostics)
+        self._regime_counts: dict[str, int] = {
+            "good": 0,
+            "moderate": 0,
+            "severe": 0,
+        }
+        self._mean_p_history: list[float] = []
 
     def assign_tasks(
         self,
@@ -436,14 +470,22 @@ class AdaptiveCoordinator(CoordinatorBase):
         """
         Select responder using weighted score of predictability and proximity.
 
-        Considers only responders with P > 0 (available communication path),
-        then calculates a combined score balancing delivery predictability
-        with geographic proximity to the task location.
+        Considers only responders with P > threshold (available communication
+        path), infers current network quality from mean P of eligible candidates,
+        selects (α, β) dynamically, then calculates a combined score:
 
-        Score = α × P_norm + β × D_norm
-        - P_norm: predictability normalised by max among candidates
-        - D_norm: proximity score (1 - normalised distance)
-        - α = β = 0.5 (equal weights)
+        Score = α × P_abs + β × D_norm − λ × W_penalty
+
+        Dynamic weight regimes (Rosas et al., 2020; Boondirek et al., 2014):
+        - mean_P > 0.40  → α = 0.4, β = 0.6  (good connectivity)
+        - 0.30 ≤ mean_P ≤ 0.40 → α = 0.3, β = 0.7  (moderate)
+        - mean_P < 0.30  → α = 0.1, β = 0.9  (severe — proximity dominates)
+
+        Sources:
+            Rosas et al. (2020) — adaptive weight adjustment
+            Shah & Ahmed (2025) — absolute DP values
+            Boondirek et al. (2014) — distance-dominant weighting
+            Cui et al. (2022) — workload-aware scoring
 
         Args:
             task: Task to assign
@@ -462,8 +504,6 @@ class AdaptiveCoordinator(CoordinatorBase):
 
         # First pass: collect all reachable candidates with their metrics
         candidates = []
-        max_predictability = 0.0
-        max_distance = 0.0
 
         for responder_id in responders:
             # Check communication path availability
@@ -489,15 +529,25 @@ class AdaptiveCoordinator(CoordinatorBase):
                 "distance": distance,
             })
 
-            # Track max values for normalisation
-            if predictability > max_predictability:
-                max_predictability = predictability
-            if distance > max_distance:
-                max_distance = distance
-
         # No reachable candidates
         if not candidates:
             return None, 0.0, None
+
+        # Compute mean P of eligible candidates to select weight regime
+        mean_p = sum(c["predictability"] for c in candidates) / len(candidates)
+        self._mean_p_history.append(mean_p)
+
+        if mean_p > self.params.p_threshold_good:
+            alpha = self.params.weight_alpha_good
+            self._regime_counts["good"] += 1
+        elif mean_p >= self.params.p_threshold_moderate:
+            alpha = self.params.weight_alpha_moderate
+            self._regime_counts["moderate"] += 1
+        else:
+            alpha = self.params.weight_alpha_severe
+            self._regime_counts["severe"] += 1
+
+        beta = 1.0 - alpha
 
         # Second pass: calculate weighted scores and select best
         best_responder = None
@@ -506,14 +556,22 @@ class AdaptiveCoordinator(CoordinatorBase):
         best_predictability = 0.0
 
         for candidate in candidates:
-            # Normalise predictability to [0, 1]
-            p_norm = candidate["predictability"] / max_predictability if max_predictability > 0 else 0
+            # Absolute P directly (already in [0, 1])
+            # Source: Shah & Ahmed (2025) — absolute DP avoids concentration
+            p_abs = candidate["predictability"]
 
-            # Normalise distance to [0, 1] and invert (closer = higher score)
-            d_norm = 1.0 - (candidate["distance"] / max_distance) if max_distance > 0 else 1.0
+            # Normalise distance against fixed simulation diagonal
+            d_norm = 1.0 - (candidate["distance"] / SIMULATION_AREA_DIAGONAL_M)
 
-            # Calculate weighted score
-            score = PREDICTABILITY_WEIGHT * p_norm + PROXIMITY_WEIGHT * d_norm
+            # Workload penalty — discourage re-assigning same responder
+            w_penalty = 1.0 if candidate["id"] in self._responder_assignments else 0.0
+
+            # Calculate weighted score with dynamic α, β
+            score = (
+                alpha * p_abs
+                + beta * d_norm
+                - WORKLOAD_PENALTY_WEIGHT * w_penalty
+            )
 
             if score > best_score:
                 best_score = score

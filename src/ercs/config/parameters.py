@@ -425,12 +425,12 @@ class ScenarioParameters(BaseModel):
     )
 
     warmup_period_seconds: int = Field(
-        default=1800,
+        default=0,
         ge=0,
-        description="Warm-up period for PRoPHET encounter history (seconds). "
-        "Allows delivery predictability to build through actual node "
-        "encounters before task generation begins. "
-        "Source: Law (2015) — warm-up period methodology",
+        description="Warm-up period (seconds). Set to 0 for cold-start evaluation: "
+        "emergency coordination systems activate from zero encounter history, "
+        "and initialisation variability is addressed through multiple "
+        "replications (Grassmann, 2008). Source: Grassmann (2008)",
     )
 
     runs_per_configuration: int = Field(
@@ -470,10 +470,53 @@ class CoordinationParameters(BaseModel):
     )
 
     available_path_threshold: float = Field(
-        default=0.0,
+        default=0.3,
         ge=0,
         lt=1,
-        description="Path threshold (P > 0). Source: Ullah & Qayyum (2022)",
+        description="Path threshold (P > 0.3). Nodes with genuine coord-zone "
+        "encounter history converge to P ≈ 0.45–0.50 while marginal transitivity "
+        "nodes stabilise at P ≈ 0.05–0.20. Source: Ullah & Qayyum (2022) SAAD",
+    )
+
+    # Dynamic weight regimes (Boondirek et al., 2014; Rosas et al., 2020)
+    weight_alpha_good: float = Field(
+        default=0.4,
+        ge=0,
+        le=1,
+        description="α when mean_P > p_threshold_good. "
+        "Source: Boondirek et al. (2014); Rosas et al. (2020)",
+    )
+
+    weight_alpha_moderate: float = Field(
+        default=0.3,
+        ge=0,
+        le=1,
+        description="α when p_threshold_moderate <= mean_P <= p_threshold_good. "
+        "Source: Boondirek et al. (2014); Rosas et al. (2020)",
+    )
+
+    weight_alpha_severe: float = Field(
+        default=0.1,
+        ge=0,
+        le=1,
+        description="α when mean_P < p_threshold_moderate. "
+        "Source: Boondirek et al. (2014); Rosas et al. (2020)",
+    )
+
+    p_threshold_good: float = Field(
+        default=0.40,
+        ge=0,
+        le=1,
+        description="mean_P above this → good connectivity regime. "
+        "Source: Rosas et al. (2020)",
+    )
+
+    p_threshold_moderate: float = Field(
+        default=0.30,
+        ge=0,
+        le=1,
+        description="mean_P at or above this → moderate connectivity regime. "
+        "Source: Rosas et al. (2020)",
     )
 
     proximity_method: Literal["euclidean"] = Field(

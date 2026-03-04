@@ -65,8 +65,8 @@ P_INIT = P_ENC_MAX
 
 MESSAGE_RATE_PER_MIN = 2.0
 SIMULATION_DURATION_S = 6_000  # ~100 minutes (Ullah & Qayyum, 2022)
-WARMUP_PERIOD_S = 1_800  # 30 minutes — PRoPHET encounter warm-up
-TOTAL_DURATION_S = 7_800  # Warmup + active (1800 + 6000)
+WARMUP_PERIOD_S = 0  # Cold-start (Grassmann, 2008)
+TOTAL_DURATION_S = 6_000  # No warm-up: equals simulation_duration_seconds
 RUNS_PER_CONFIG = 30  # (Law, 2015)
 
 # Urgency distribution (Li et al., 2025)
@@ -80,7 +80,14 @@ URGENCY_LOW_PROP = 0.30
 
 COORDINATION_INTERVAL_S = 1_800  # 30 minutes (Kaji et al., 2025)
 PRIORITY_LEVELS = 3
-PATH_THRESHOLD = 0.0
+PATH_THRESHOLD = 0.3
+
+# Dynamic weight regimes (Boondirek et al., 2014; Rosas et al., 2020)
+WEIGHT_ALPHA_GOOD = 0.4
+WEIGHT_ALPHA_MODERATE = 0.3
+WEIGHT_ALPHA_SEVERE = 0.1
+P_THRESHOLD_GOOD = 0.40
+P_THRESHOLD_MODERATE = 0.30
 
 # =============================================================================
 # Experiment 

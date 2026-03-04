@@ -797,16 +797,12 @@ class TestSimulationIntegration:
 
     @pytest.fixture
     def integration_config(self) -> SimulationConfig:
-        """Config for integration tests.
-
-        Uses a short warm-up (120s) so PRoPHET predictability builds
-        through encounters before the first coordination cycle.
-        """
+        """Config for integration tests (cold-start)."""
         return SimulationConfig(
             scenario=ScenarioParameters(
                 simulation_duration_seconds=600,
                 message_rate_per_minute=MESSAGE_RATE_PER_MIN,
-                warmup_period_seconds=120,
+                warmup_period_seconds=0,
             ),
             coordination=CoordinationParameters(
                 update_interval_seconds=120,
