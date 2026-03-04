@@ -53,6 +53,7 @@ def main() -> None:
           f"total={config.total_simulation_duration}s")
     print(f"Threshold={config.coordination.available_path_threshold}, "
           f"α={config.coordination.predictability_weight}, "
+          f"γ_r={config.coordination.recency_weight}, "
           f"β={config.coordination.proximity_weight}\n")
 
     total = len(ALGORITHMS) * len(CONNECTIVITY_LEVELS) * RUNS_PER_CONFIG
@@ -142,12 +143,13 @@ def main() -> None:
     # ── Acceptance conditions ────────────────────────────────────────────
     print("\n── Acceptance conditions ──")
 
-    # Condition 1: static α=0.3 used everywhere
+    # Condition 1: static weights α=0.2, γ_r=0.2, β=0.6
     alpha = config.coordination.predictability_weight
+    gamma_r = config.coordination.recency_weight
     beta = config.coordination.proximity_weight
-    cond1 = alpha == 0.3 and beta == 0.7
+    cond1 = alpha == 0.2 and gamma_r == 0.2 and beta == 0.6
     status1 = "PASS" if cond1 else "FAIL"
-    print(f"  1. Static α={alpha}, β={beta}: {status1}")
+    print(f"  1. Static α={alpha}, γ_r={gamma_r}, β={beta}: {status1}")
 
     # Condition 2: adaptive delivery_rate > baseline at 20% connectivity
     adap_del_20 = mean_del[("adaptive", 0.20)]

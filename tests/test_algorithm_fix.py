@@ -20,6 +20,7 @@ from ercs.config.parameters import CoordinationParameters, UrgencyLevel
 from ercs.coordination.algorithms import (
     PREDICTABILITY_WEIGHT,
     PROXIMITY_WEIGHT,
+    RECENCY_WEIGHT,
     SIMULATION_AREA_DIAGONAL_M,
     WORKLOAD_PENALTY_WEIGHT,
     AdaptiveCoordinator,
@@ -51,9 +52,13 @@ class MockNetworkState:
 
     def __init__(self, predictabilities: dict[tuple[str, str], float] | None = None):
         self._predictabilities = predictabilities or {}
+        self._last_encounter_times: dict[tuple[str, str], float] = {}
 
     def get_delivery_predictability(self, from_node: str, to_node: str) -> float:
         return self._predictabilities.get((from_node, to_node), 0.0)
+
+    def get_last_encounter_time(self, from_node: str, to_node: str) -> float:
+        return self._last_encounter_times.get((from_node, to_node), 0.0)
 
     def set_predictability(self, from_node: str, to_node: str, value: float) -> None:
         self._predictabilities[(from_node, to_node)] = value
@@ -85,12 +90,16 @@ class TestConstants:
     """Verify module-level constants after the fix."""
 
     def test_predictability_weight(self):
-        """α = 0.3 (Boondirek et al., 2014)."""
-        assert PREDICTABILITY_WEIGHT == pytest.approx(0.3)
+        """α = 0.2 (Boondirek et al., 2014; adjusted for recency)."""
+        assert PREDICTABILITY_WEIGHT == pytest.approx(0.2)
+
+    def test_recency_weight(self):
+        """γ_r = 0.2 (Nelson et al., 2009)."""
+        assert RECENCY_WEIGHT == pytest.approx(0.2)
 
     def test_proximity_weight(self):
-        """β = 0.7 (Boondirek et al., 2014)."""
-        assert PROXIMITY_WEIGHT == pytest.approx(0.7)
+        """β = 0.6 (Boondirek et al., 2014; adjusted for recency)."""
+        assert PROXIMITY_WEIGHT == pytest.approx(0.6)
 
     def test_workload_penalty_weight(self):
         """λ = 0.2 (Cui et al., 2022)."""

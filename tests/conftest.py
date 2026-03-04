@@ -82,9 +82,10 @@ COORDINATION_INTERVAL_S = 1_800  # 30 minutes (Kaji et al., 2025)
 PRIORITY_LEVELS = 3
 PATH_THRESHOLD = 0.3
 
-# Static scoring weights (Boondirek et al., 2014)
-PREDICTABILITY_WEIGHT = 0.3
-PROXIMITY_WEIGHT = 0.7
+# Static scoring weights (Boondirek et al., 2014; Nelson et al., 2009)
+PREDICTABILITY_WEIGHT = 0.2
+RECENCY_WEIGHT = 0.2
+PROXIMITY_WEIGHT = 0.6
 
 # =============================================================================
 # Experiment 

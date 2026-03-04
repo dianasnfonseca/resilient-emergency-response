@@ -83,6 +83,10 @@ class MockNetworkState:
         """Get delivery predictability."""
         return self._predictabilities.get((from_node, to_node), 0.0)
 
+    def get_last_encounter_time(self, from_node: str, to_node: str) -> float:
+        """Get time of last direct encounter (0.0 if never)."""
+        return 0.0
+
     def set_predictability(self, from_node: str, to_node: str, value: float) -> None:
         """Set a predictability value."""
         self._predictabilities[(from_node, to_node)] = value

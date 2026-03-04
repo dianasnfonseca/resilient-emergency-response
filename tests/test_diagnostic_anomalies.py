@@ -68,6 +68,9 @@ class StubNetworkState:
     def get_delivery_predictability(self, from_node: str, to_node: str) -> float:
         return self._pred.get((from_node, to_node), 0.0)
 
+    def get_last_encounter_time(self, from_node: str, to_node: str) -> float:
+        return 0.0
+
 
 def _make_task(
     task_id: str,
@@ -517,10 +520,10 @@ class TestAdaptiveGeographicClustering:
     def test_moderate_p_difference_favours_closer_node(self):
         """
         After the fix (absolute P, proximity-dominant weights, fixed diagonal),
-        the closer node wins when P differences are moderate because β=0.7
+        the closer node wins when P differences are moderate because β=0.6
         heavily weights proximity.
 
-        Static weights α=0.3, β=0.7.
+        Static weights α=0.2, γ_r=0.2, β=0.6. R_norm=0.0 for all (never encountered at t=100).
         """
         task = _make_task("t_0", 10.0, x=300.0, y=300.0)
 
@@ -531,7 +534,7 @@ class TestAdaptiveGeographicClustering:
         }
         locator = StubResponderLocator(positions)
 
-        # All above 0.3 threshold; static α=0.3, β=0.7
+        # All above 0.3 threshold; static α=0.2, γ_r=0.2, β=0.6
         net = StubNetworkState({
             ("coord_0", "r_close"): 0.32,
             ("coord_0", "r_moderate"): 0.37,
@@ -545,10 +548,10 @@ class TestAdaptiveGeographicClustering:
 
         assigned = assignments[0].responder_id
 
-        # Dynamic weights: mean_P=0.37 → moderate → α=0.3, β=0.7
-        # r_close:    0.3×0.32 + 0.7×(1-22/3354.1)  = 0.096 + 0.695 = 0.791
-        # r_moderate: 0.3×0.37 + 0.7×(1-112/3354.1)  = 0.111 + 0.677 = 0.788
-        # r_far:      0.3×0.42 + 0.7×(1-361/3354.1)  = 0.126 + 0.625 = 0.751
+        # Weights: α=0.2, γ_r=0.2, β=0.6; R_norm=0.0 (never encountered at t=100)
+        # r_close:    0.2×0.32 + 0.2×0 + 0.6×(1-22/3354.1)  = 0.064 + 0.596 = 0.660
+        # r_moderate: 0.2×0.37 + 0.2×0 + 0.6×(1-112/3354.1) = 0.074 + 0.580 = 0.654
+        # r_far:      0.2×0.42 + 0.2×0 + 0.6×(1-361/3354.1) = 0.084 + 0.535 = 0.619
         # r_close wins — proximity-dominant weighting in action
         assert assigned == "r_close"
 

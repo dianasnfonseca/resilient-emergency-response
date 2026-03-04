@@ -594,6 +594,14 @@ class DeliveryPredictabilityMatrix:
 
         self._last_aging_time[node_id] = current_time
 
+    def get_last_encounter_time(self, node_a: str, node_b: str) -> float:
+        """
+        Return time of last direct encounter between node_a and node_b.
+
+        Returns 0.0 if the pair has never encountered each other.
+        """
+        return self._last_encounter_time.get((node_a, node_b), 0.0)
+
     def get_all_predictabilities(self, node_id: str) -> dict[str, float]:
         """Get all predictability values for a node."""
         if node_id not in self._matrix:
@@ -1035,6 +1043,10 @@ class CommunicationLayer:
     def get_delivery_predictability(self, node_id: str, destination: str) -> float:
         """Get delivery predictability from a node to a destination."""
         return self.predictability.get_predictability(node_id, destination)
+
+    def get_last_encounter_time(self, node_a: str, node_b: str) -> float:
+        """Get time of last direct encounter between two nodes (0.0 if never)."""
+        return self.predictability.get_last_encounter_time(node_a, node_b)
 
     @property
     def statistics(self) -> dict:

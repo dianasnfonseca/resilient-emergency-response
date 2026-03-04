@@ -230,6 +230,10 @@ class TopologyAdapter(ResponderLocator, NetworkStateProvider):
         """Get delivery predictability P(from_node, to_node)."""
         return self.communication.get_delivery_predictability(from_node, to_node)
 
+    def get_last_encounter_time(self, from_node: str, to_node: str) -> float:
+        """Get time of last direct encounter between two nodes (0.0 if never)."""
+        return self.communication.get_last_encounter_time(from_node, to_node)
+
 
 class SimulationEngine:
     """

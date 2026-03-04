@@ -13,7 +13,7 @@ The coordination layer provides:
 
 Key differences between algorithms:
 - Adaptive: considers communication path availability (P > 0.3 threshold)
-- Adaptive: uses static α=0.3, β=0.7 weighting (predictability + proximity)
+- Adaptive: uses static α=0.2, γ_r=0.2, β=0.6 weighting (predictability + recency + proximity)
 - Adaptive: prioritises high-urgency tasks
 - Baseline: assigns to nearest responder regardless of connectivity
 - Baseline: processes tasks in creation order (FCFS)
@@ -44,9 +44,11 @@ from ercs.config.parameters import (
 from ercs.scenario.generator import Task
 
 # Static scoring weights for the adaptive algorithm.
-# Source: Boondirek et al. (2014) DiPRoPHET (ICUIMC) — distance as dominant criterion
-PREDICTABILITY_WEIGHT = 0.3  # α
-PROXIMITY_WEIGHT = 0.7  # β = 1 − α
+# Source: Boondirek et al. (2014) DiPRoPHET (ICUIMC) — distance as dominant criterion.
+# Recency weight added to break P-value saturation ties (Nelson et al., 2009).
+PREDICTABILITY_WEIGHT = 0.2  # α
+RECENCY_WEIGHT = 0.2  # γ_r (encounter recency)
+PROXIMITY_WEIGHT = 0.6  # β
 
 # Workload penalty weight — discourages re-assigning the same responder
 # across consecutive coordination cycles, preventing node overload.
@@ -65,6 +67,10 @@ class NetworkStateProvider(Protocol):
 
     def get_delivery_predictability(self, from_node: str, to_node: str) -> float:
         """Get delivery predictability P(from_node, to_node)."""
+        ...
+
+    def get_last_encounter_time(self, from_node: str, to_node: str) -> float:
+        """Get time of last direct encounter between two nodes (0.0 if never)."""
         ...
 
 
@@ -213,6 +219,7 @@ class CoordinatorBase(ABC):
         responder_locator: ResponderLocator,
         network_state: NetworkStateProvider | None,
         coordination_node: str,
+        current_time: float = 0.0,
     ) -> tuple[str | None, float, float | None]:
         """
         Select the best responder for a task.
@@ -222,6 +229,7 @@ class CoordinatorBase(ABC):
             responder_locator: Provider of responder locations
             network_state: Provider of network state
             coordination_node: Coordination node making the decision
+            current_time: Current simulation time
 
         Returns:
             Tuple of (responder_id, distance, predictability) or (None, 0, None) if no suitable responder
@@ -320,27 +328,27 @@ class AdaptiveCoordinator(CoordinatorBase):
     The adaptive algorithm:
     1. Processes tasks in urgency order (High > Medium > Low)
     2. Considers only responders with available communication paths (P > 0.3)
-    3. Calculates a weighted score combining predictability and proximity
+    3. Calculates a weighted score combining predictability, recency, and proximity
     4. Selects the responder with highest combined score
 
-    Score = α × P_abs + β × D_norm − λ × W_penalty
+    Score = α × P_abs + γ_r × R_norm + β × D_norm − λ × W_penalty
 
     - P_abs: absolute delivery predictability (already in [0, 1])
+    - R_norm: encounter recency = 1 − min(Δt / 1800, 1.0), where Δt is time
+      since last direct encounter with the coordination node
     - D_norm: 1 - (distance / area_diagonal), using the fixed simulation diagonal
     - W_penalty: 1 if the responder was assigned in the prior cycle, else 0
-    - α = 0.3, β = 0.7, λ = 0.2
+    - α = 0.2, γ_r = 0.2, β = 0.6, λ = 0.2
 
-    Note: A dynamic weight mechanism (three regimes based on mean_P of eligible
-    candidates) was explored but found structurally non-functional.  PRoPHET's
-    bimodal P value distribution — genuine encounter nodes converge to
-    P ≈ 0.45–0.50 while transitivity-only nodes remain at P ≈ 0.05–0.20 —
-    means the P > 0.3 eligibility threshold guarantees mean_P > 0.40 in all
-    eligible candidate sets.  The moderate (α=0.3) and severe (α=0.1) regimes
-    were unreachable in 2,562 coordinator calls across a cold-start pilot
-    (documented in dissertation Section 4.4).
+    Encounter recency addresses P-value saturation: under Random Waypoint
+    mobility, PRoPHET P values converge to near-uniform ~0.45–0.50 for all
+    encountered responders (Boondirek et al., 2014; Nelson et al., 2009).
+    The recency signal discriminates between recently-contacted nodes
+    (high confidence in current position/state) and stale contacts.
 
     Sources:
         - Boondirek et al. (2014): Distance-dominant weighting (DiPRoPHET)
+        - Nelson et al. (2009): Encounter-based routing, recency as signal
         - Shah & Ahmed (2025): Absolute DP values (SN Computer Science)
         - Cui et al. (2022): Workload-aware scoring (AdaptiveSpray)
         - Kaji et al. (2025): Urgency-first prioritisation, 30-min interval
@@ -408,7 +416,8 @@ class AdaptiveCoordinator(CoordinatorBase):
 
             # Select responder
             responder_id, distance, predictability = self._select_responder(
-                task, responder_locator, network_state, coordination_node
+                task, responder_locator, network_state, coordination_node,
+                current_time=current_time,
             )
 
             if responder_id is not None:
@@ -427,6 +436,14 @@ class AdaptiveCoordinator(CoordinatorBase):
                 self._record_assignment(assignment)
                 assignments.append(assignment)
 
+                # Compute recency for this assignment (for logging)
+                T_REF = 1800.0
+                last_enc = network_state.get_last_encounter_time(
+                    coordination_node, responder_id
+                )
+                delta_t = max(0.0, current_time - last_enc)
+                recency = 1.0 - min(delta_t / T_REF, 1.0)
+
                 # Log event
                 self._log_event(
                     EventType.TASK_ASSIGNED,
@@ -436,6 +453,7 @@ class AdaptiveCoordinator(CoordinatorBase):
                     urgency=task.urgency.value,
                     distance=distance,
                     predictability=predictability,
+                    recency=recency,
                 )
             else:
                 # No suitable responder found
@@ -456,27 +474,30 @@ class AdaptiveCoordinator(CoordinatorBase):
         responder_locator: ResponderLocator,
         network_state: NetworkStateProvider | None,
         coordination_node: str,
+        current_time: float = 0.0,
     ) -> tuple[str | None, float, float | None]:
         """
-        Select responder using weighted score of predictability and proximity.
+        Select responder using weighted score of predictability, recency, and proximity.
 
         Considers only responders with P > threshold (available communication
         path), then calculates a combined score:
 
-        Score = α × P_abs + β × D_norm − λ × W_penalty
+        Score = α × P_abs + γ_r × R_norm + β × D_norm − λ × W_penalty
 
-        Static weights: α = 0.3, β = 0.7 (Boondirek et al., 2014).
+        where R_norm = 1 − min(Δt / T_REF, 1.0) and T_REF = 1800 s (i_typ).
 
         Sources:
             Shah & Ahmed (2025) — absolute DP values
             Boondirek et al. (2014) — distance-dominant weighting
             Cui et al. (2022) — workload-aware scoring
+            Nelson et al. (2009) — encounter recency as routing signal
 
         Args:
             task: Task to assign
             responder_locator: Provider of responder locations
             network_state: Provider of network state
             coordination_node: Coordination node
+            current_time: Current simulation time (for recency calculation)
 
         Returns:
             (responder_id, distance, predictability) or (None, 0, None)
@@ -486,6 +507,9 @@ class AdaptiveCoordinator(CoordinatorBase):
 
         responders = responder_locator.get_all_responder_ids()
         threshold = self.params.available_path_threshold
+
+        # T_REF matches PRoPHET i_typ parameter (seconds) — inter-encounter half-life
+        T_REF = 1800.0
 
         # First pass: collect all reachable candidates with their metrics
         candidates = []
@@ -508,19 +532,29 @@ class AdaptiveCoordinator(CoordinatorBase):
                 ry,
             )
 
+            # Encounter recency: R_norm = 1 − min(Δt / T_REF, 1.0)
+            last_enc = network_state.get_last_encounter_time(
+                coordination_node, responder_id
+            )
+            delta_t = max(0.0, current_time - last_enc)
+            r_norm = 1.0 - min(delta_t / T_REF, 1.0)
+
             candidates.append({
                 "id": responder_id,
                 "predictability": predictability,
                 "distance": distance,
+                "recency": r_norm,
+                "last_encounter": last_enc,
             })
 
         # No reachable candidates
         if not candidates:
             return None, 0.0, None
 
-        # Static weights — Boondirek et al. (2014); empirically calibrated
-        alpha = self.params.predictability_weight  # 0.3
-        beta = self.params.proximity_weight         # 0.7
+        # Static weights
+        alpha = self.params.predictability_weight   # 0.2
+        gamma_r = self.params.recency_weight        # 0.2
+        beta = self.params.proximity_weight          # 0.6
 
         # Second pass: calculate weighted scores and select best
         best_responder = None
@@ -530,8 +564,10 @@ class AdaptiveCoordinator(CoordinatorBase):
 
         for candidate in candidates:
             # Absolute P directly (already in [0, 1])
-            # Source: Shah & Ahmed (2025) — absolute DP avoids concentration
             p_abs = candidate["predictability"]
+
+            # Encounter recency
+            r_norm = candidate["recency"]
 
             # Normalise distance against fixed simulation diagonal
             d_norm = 1.0 - (candidate["distance"] / SIMULATION_AREA_DIAGONAL_M)
@@ -542,6 +578,7 @@ class AdaptiveCoordinator(CoordinatorBase):
             # Calculate weighted score
             score = (
                 alpha * p_abs
+                + gamma_r * r_norm
                 + beta * d_norm
                 - WORKLOAD_PENALTY_WEIGHT * w_penalty
             )
@@ -621,7 +658,8 @@ class BaselineCoordinator(CoordinatorBase):
 
             # Select responder (proximity only)
             responder_id, distance, _ = self._select_responder(
-                task, responder_locator, network_state, coordination_node
+                task, responder_locator, network_state, coordination_node,
+                current_time=current_time,
             )
 
             if responder_id is not None:
@@ -667,6 +705,7 @@ class BaselineCoordinator(CoordinatorBase):
         responder_locator: ResponderLocator,
         network_state: NetworkStateProvider | None,  # noqa: ARG002 - baseline ignores
         coordination_node: str,  # noqa: ARG002 - baseline ignores
+        current_time: float = 0.0,  # noqa: ARG002 - baseline ignores
     ) -> tuple[str | None, float, float | None]:
         """
         Select nearest responder by proximity only.
@@ -678,6 +717,7 @@ class BaselineCoordinator(CoordinatorBase):
             responder_locator: Provider of responder locations
             network_state: Ignored by baseline
             coordination_node: Not used
+            current_time: Not used by baseline
 
         Returns:
             (responder_id, distance, None)

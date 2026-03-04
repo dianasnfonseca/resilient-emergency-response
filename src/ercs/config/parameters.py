@@ -478,20 +478,28 @@ class CoordinationParameters(BaseModel):
         "nodes stabilise at P ≈ 0.05–0.20. Source: Ullah & Qayyum (2022) SAAD",
     )
 
-    # Static scoring weights (Boondirek et al., 2014)
+    # Static scoring weights (Boondirek et al., 2014; Nelson et al., 2009)
     predictability_weight: float = Field(
-        default=0.3,
+        default=0.2,
         ge=0,
         le=1,
         description="α — predictability weight in scoring formula. "
         "Source: Boondirek et al. (2014) DiPRoPHET",
     )
 
-    proximity_weight: float = Field(
-        default=0.7,
+    recency_weight: float = Field(
+        default=0.2,
         ge=0,
         le=1,
-        description="β — proximity weight in scoring formula (β = 1 − α). "
+        description="γ_r — encounter recency weight in scoring formula. "
+        "R_norm = 1 − min(Δt / 1800, 1.0). Source: Nelson et al. (2009)",
+    )
+
+    proximity_weight: float = Field(
+        default=0.6,
+        ge=0,
+        le=1,
+        description="β — proximity weight in scoring formula. "
         "Source: Boondirek et al. (2014) DiPRoPHET",
     )
 
