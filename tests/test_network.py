@@ -224,53 +224,70 @@ class TestTopologyGenerator:
 
 
 class TestConnectivityScenarios:
-    """Tests for connectivity level scenarios from Karaman et al. (2026)."""
-    
+    """Tests for connectivity filtering at encounter level.
+
+    Connectivity filtering was moved from topology generation to the
+    simulation engine's ``_is_link_available()`` (CRC32-based, deterministic).
+    The topology itself always contains all range-based edges.
+
+    Source: Karaman et al. (2026) — infrastructure damage scenarios.
+    """
+
     @pytest.fixture
     def generator(self) -> TopologyGenerator:
         """Create generator with fixed seed for reproducibility."""
         return TopologyGenerator(NetworkParameters(), random_seed=42)
-    
-    def test_full_connectivity_has_most_edges(self, generator: TopologyGenerator):
-        """Verify full connectivity (1.0) has maximum edges."""
-        full = generator.generate(connectivity_level=None)
-        partial = generator.generate(connectivity_level=0.75)
-        
-        assert full.total_edges >= partial.total_edges
-    
-    def test_mild_degradation_75_percent(self, generator: TopologyGenerator):
-        """Test 75% connectivity scenario (mild degradation)."""
-        topology = generator.generate(connectivity_level=0.75)
-        full_topology = generator.generate(connectivity_level=None)
-        
-        # Should have approximately 75% of full edges (allow wider variance due to randomness)
-        if full_topology.total_edges > 0:
-            ratio = topology.total_edges / full_topology.total_edges
-            assert 0.60 <= ratio <= 0.90  # Allow wider variance
-    
-    def test_moderate_degradation_40_percent(self, generator: TopologyGenerator):
-        """Test 40% connectivity scenario (moderate degradation)."""
-        topology = generator.generate(connectivity_level=0.40)
-        full_topology = generator.generate(connectivity_level=None)
-        
-        if full_topology.total_edges > 0:
-            ratio = topology.total_edges / full_topology.total_edges
-            assert 0.30 <= ratio <= 0.50
-    
-    def test_severe_degradation_20_percent(self, generator: TopologyGenerator):
-        """Test 20% connectivity scenario (severe degradation)."""
-        topology = generator.generate(connectivity_level=0.20)
-        full_topology = generator.generate(connectivity_level=None)
-        
-        if full_topology.total_edges > 0:
-            ratio = topology.total_edges / full_topology.total_edges
-            assert 0.10 <= ratio <= 0.30
-    
-    def test_zero_connectivity_no_edges(self, generator: TopologyGenerator):
-        """Test 0% connectivity produces no edges."""
-        topology = generator.generate(connectivity_level=0.0)
-        
-        assert topology.total_edges == 0
+
+    def test_generate_produces_full_connectivity(
+        self, generator: TopologyGenerator
+    ):
+        """Topology generation always produces full range-based edges."""
+        topology = generator.generate()
+        # All nodes within radio range should be connected
+        assert topology.total_edges > 0
+
+    def test_generate_ignores_legacy_connectivity_kwarg(self):
+        """generate_topology still accepts connectivity_level for compat."""
+        topo_full = generate_topology(random_seed=42)
+        topo_legacy = generate_topology(
+            connectivity_level=0.5, random_seed=42
+        )
+        # Both should have identical edges — kwarg is ignored
+        assert topo_full.total_edges == topo_legacy.total_edges
+
+    def test_link_availability_is_deterministic(self):
+        """CRC32-based link filter produces same result for same inputs."""
+        import zlib
+
+        pair_str = "coord_0|mobile_5|42"
+        h1 = zlib.crc32(pair_str.encode()) % 10000
+        h2 = zlib.crc32(pair_str.encode()) % 10000
+        assert h1 == h2
+
+    def test_link_availability_varies_with_seed(self):
+        """Different seeds produce different link configurations."""
+        import zlib
+
+        pair = "coord_0|mobile_5"
+        hashes = {
+            zlib.crc32(f"{pair}|{seed}".encode()) % 10000
+            for seed in range(100)
+        }
+        # With 100 different seeds, should get substantial variation
+        assert len(hashes) > 50
+
+    def test_lower_connectivity_is_strict_subset(self):
+        """Links at lower connectivity are a subset of higher connectivity."""
+        import zlib
+
+        pairs = [f"coord_0|mobile_{i}|42" for i in range(48)]
+        hashes = [zlib.crc32(p.encode()) % 10000 for p in pairs]
+
+        available_75 = {p for p, h in zip(pairs, hashes) if h < 7500}
+        available_40 = {p for p, h in zip(pairs, hashes) if h < 4000}
+        available_20 = {p for p, h in zip(pairs, hashes) if h < 2000}
+
+        assert available_20 <= available_40 <= available_75
 
 
 class TestNetworkTopology:

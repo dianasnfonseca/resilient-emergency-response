@@ -364,7 +364,6 @@ class SimulationEngine:
         # Phase 1: Network Topology
         self._topology = generate_topology(
             parameters=self.config.network,
-            connectivity_level=self.connectivity_level,
             random_seed=self.random_seed,
         )
 
@@ -687,8 +686,13 @@ class SimulationEngine:
         Determine if a communication link exists between two nodes.
 
         Models infrastructure damage (Karaman et al., 2026) where some links
-        are unavailable due to base station failures. Uses deterministic hash
-        so the same node pair has consistent link status within a run.
+        are unavailable due to base station failures.  Uses CRC32 for a
+        deterministic, process-stable hash so that:
+
+        - The same (pair, seed) always produces the same result.
+        - Different seeds yield genuinely different link configurations.
+        - Links at lower connectivity are a strict subset of those at higher
+          connectivity (monotonic threshold on a fixed hash value).
 
         At connectivity_level=0.75, ~75% of potential links exist.
         At connectivity_level=0.20, only ~20% exist.
@@ -698,8 +702,11 @@ class SimulationEngine:
         if pair_key in self._link_availability:
             return self._link_availability[pair_key]
 
-        # Deterministic: hash node pair + run seed
-        pair_hash = hash((pair_key, self.random_seed)) % 10000
+        # Deterministic, process-stable hash via CRC32
+        import zlib
+
+        pair_str = f"{pair_key[0]}|{pair_key[1]}|{self.random_seed}"
+        pair_hash = zlib.crc32(pair_str.encode()) % 10000
         threshold = int(self.connectivity_level * 10000)
         available = pair_hash < threshold
 

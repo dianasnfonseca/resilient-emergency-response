@@ -255,22 +255,22 @@ class TopologyGenerator:
         self.random_seed = random_seed
         self._rng = np.random.default_rng(random_seed)
     
-    def generate(self, connectivity_level: float | None = None) -> NetworkTopology:
+    def generate(self) -> NetworkTopology:
         """
         Generate a complete network topology.
-        
-        Args:
-            connectivity_level: Optional override for link availability (0-1).
-                              If None, creates full connectivity based on range.
-        
+
+        All nodes within radio range are connected.  Infrastructure damage
+        (connectivity_level) is applied at encounter time in the simulation
+        engine via ``_is_link_available()``, not here.
+
         Returns:
             NetworkTopology object containing graph and node data
         """
         # Generate nodes
         nodes = self._generate_nodes()
-        
-        # Create network graph
-        graph = self._create_graph(nodes, connectivity_level)
+
+        # Create network graph (full range-based connectivity)
+        graph = self._create_graph(nodes)
         
         return NetworkTopology(
             graph=graph,
@@ -375,60 +375,42 @@ class TopologyGenerator:
         
         return nodes
     
-    def _create_graph(
-        self, 
-        nodes: dict[str, Node], 
-        connectivity_level: float | None = None
-    ) -> nx.Graph:
+    def _create_graph(self, nodes: dict[str, Node]) -> nx.Graph:
         """
         Create NetworkX graph with edges based on communication range.
-        
-        Edges represent potential communication links between nodes within
-        radio range. Connectivity level can reduce available links to simulate
-        infrastructure degradation.
-        
+
+        All node pairs within radio range receive an edge.  Infrastructure
+        damage filtering (connectivity_level) is applied at encounter time
+        in the simulation engine, not during topology generation — this
+        avoids the inconsistency where ``update_edges_from_positions()``
+        would re-add all range-based edges on the first mobility step,
+        washing out any initial filtering.
+
         Args:
             nodes: Dictionary of node IDs to Node objects
-            connectivity_level: Fraction of potential links that are available (0-1)
-        
+
         Returns:
             NetworkX Graph with nodes and edges
         """
         graph = nx.Graph()
-        
+
         # Add nodes with attributes
         for node_id, node in nodes.items():
             graph.add_node(node_id, **node.to_dict())
-        
-        # Create list of all potential edges (nodes within radio range)
-        potential_edges: list[tuple[str, str, float]] = []
+
+        # Add all edges for nodes within radio range
         node_ids = list(nodes.keys())
         radio_range = self.parameters.radio_range_m
-        
+
         for i, node_a_id in enumerate(node_ids):
             for node_b_id in node_ids[i + 1:]:
                 node_a = nodes[node_a_id]
                 node_b = nodes[node_b_id]
-                
+
                 distance = node_a.distance_to(node_b)
                 if distance <= radio_range:
-                    potential_edges.append((node_a_id, node_b_id, distance))
-        
-        # Apply connectivity level if specified
-        if connectivity_level is not None and connectivity_level < 1.0:
-            # Randomly select edges to keep based on connectivity level
-            num_edges_to_keep = int(len(potential_edges) * connectivity_level)
-            selected_indices = self._rng.choice(
-                len(potential_edges),
-                size=num_edges_to_keep,
-                replace=False
-            )
-            potential_edges = [potential_edges[i] for i in selected_indices]
-        
-        # Add edges with distance as weight
-        for node_a_id, node_b_id, distance in potential_edges:
-            graph.add_edge(node_a_id, node_b_id, distance=distance)
-        
+                    graph.add_edge(node_a_id, node_b_id, distance=distance)
+
         return graph
     
     def get_zone_bounds(self, zone: ZoneConfig) -> tuple[float, float, float, float]:
@@ -448,27 +430,34 @@ class TopologyGenerator:
 
 def generate_topology(
     parameters: NetworkParameters | None = None,
-    connectivity_level: float | None = None,
     random_seed: int | None = None,
+    **kwargs,
 ) -> NetworkTopology:
     """
     Convenience function to generate a network topology.
-    
+
+    All nodes within radio range are connected.  Infrastructure damage
+    (connectivity_level) is applied at encounter time in the simulation
+    engine, not during topology generation.
+
     Args:
         parameters: Network parameters (uses defaults if None)
-        connectivity_level: Link availability fraction (0-1)
         random_seed: Random seed for reproducibility
-    
+
     Returns:
         Generated NetworkTopology
-    
+
     Example:
         >>> from ercs.network import generate_topology
-        >>> topology = generate_topology(connectivity_level=0.75, random_seed=42)
+        >>> topology = generate_topology(random_seed=42)
         >>> print(f"Nodes: {topology.total_nodes}, Edges: {topology.total_edges}")
     """
+    # Accept (and ignore) legacy connectivity_level kwarg for
+    # backward compatibility with scripts and tests.
+    kwargs.pop("connectivity_level", None)
+
     if parameters is None:
         parameters = NetworkParameters()
-    
+
     generator = TopologyGenerator(parameters, random_seed)
-    return generator.generate(connectivity_level)
+    return generator.generate()
