@@ -630,6 +630,7 @@ class SimulationEngine:
             network_state=self._adapter,
             coordination_node=coord_node,
             current_time=event.timestamp,
+            all_coordination_nodes=coord_nodes,
         )
 
         # Process assignments — distribute messages across coord nodes (round-robin)

@@ -47,6 +47,7 @@ METRICS_CONFIG = {
     "delivery_rate": {"ylabel": "Message Delivery Rate", "title": "Delivery Rate", "fmt": ".3f", "pct": True},
     "assignment_rate": {"ylabel": "Task Assignment Rate", "title": "Assignment Rate", "fmt": ".3f", "pct": True},
     "avg_response_time": {"ylabel": "Mean Response Time (s)", "title": "Response Time", "fmt": ".1f", "pct": False},
+    "avg_delivery_time": {"ylabel": "Mean Delivery Time (s)", "title": "Delivery Time", "fmt": ".1f", "pct": False},
 }
 
 
@@ -369,8 +370,8 @@ def plot_heatmap(
                 ][metric_key].dropna()
                 matrix[i, j] = values.mean() if len(values) > 0 else 0.0
 
-        # For response time, lower is better -> reverse colormap
-        if metric_key == "avg_response_time":
+        # For time metrics, lower is better -> non-reversed colormap
+        if metric_key in ("avg_response_time", "avg_delivery_time"):
             cmap = "YlOrRd"
         else:
             cmap = "YlOrRd_r"

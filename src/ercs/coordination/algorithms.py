@@ -196,6 +196,7 @@ class CoordinatorBase(ABC):
         network_state: NetworkStateProvider | None,
         coordination_node: str,
         current_time: float,
+        all_coordination_nodes: list[str] | None = None,
     ) -> list[Assignment]:
         """
         Assign pending tasks to responders.
@@ -206,6 +207,8 @@ class CoordinatorBase(ABC):
             network_state: Provider of network state (for adaptive algorithm)
             coordination_node: ID of the coordination node making assignments
             current_time: Current simulation time
+            all_coordination_nodes: All coordination node IDs for multi-node
+                P-value queries (Adaptive uses max P across all coord nodes)
 
         Returns:
             List of new assignments made
@@ -220,6 +223,7 @@ class CoordinatorBase(ABC):
         network_state: NetworkStateProvider | None,
         coordination_node: str,
         current_time: float = 0.0,
+        all_coordination_nodes: list[str] | None = None,
     ) -> tuple[str | None, float, float | None]:
         """
         Select the best responder for a task.
@@ -230,6 +234,7 @@ class CoordinatorBase(ABC):
             network_state: Provider of network state
             coordination_node: Coordination node making the decision
             current_time: Current simulation time
+            all_coordination_nodes: All coordination node IDs for multi-node queries
 
         Returns:
             Tuple of (responder_id, distance, predictability) or (None, 0, None) if no suitable responder
@@ -373,6 +378,7 @@ class AdaptiveCoordinator(CoordinatorBase):
         network_state: NetworkStateProvider | None,
         coordination_node: str,
         current_time: float,
+        all_coordination_nodes: list[str] | None = None,
     ) -> list[Assignment]:
         """
         Assign tasks using adaptive algorithm.
@@ -386,6 +392,8 @@ class AdaptiveCoordinator(CoordinatorBase):
             network_state: Provider of network state (required for adaptive)
             coordination_node: Coordination node making assignments
             current_time: Current simulation time
+            all_coordination_nodes: All coordination node IDs for multi-node
+                P-value queries (uses max P across all coord nodes)
 
         Returns:
             List of new assignments
@@ -418,6 +426,7 @@ class AdaptiveCoordinator(CoordinatorBase):
             responder_id, distance, predictability = self._select_responder(
                 task, responder_locator, network_state, coordination_node,
                 current_time=current_time,
+                all_coordination_nodes=all_coordination_nodes,
             )
 
             if responder_id is not None:
@@ -438,8 +447,10 @@ class AdaptiveCoordinator(CoordinatorBase):
 
                 # Compute recency for this assignment (for logging)
                 T_REF = 1800.0
-                last_enc = network_state.get_last_encounter_time(
-                    coordination_node, responder_id
+                coord_nodes_to_query = all_coordination_nodes or [coordination_node]
+                last_enc = max(
+                    network_state.get_last_encounter_time(cn, responder_id)
+                    for cn in coord_nodes_to_query
                 )
                 delta_t = max(0.0, current_time - last_enc)
                 recency = 1.0 - min(delta_t / T_REF, 1.0)
@@ -475,6 +486,7 @@ class AdaptiveCoordinator(CoordinatorBase):
         network_state: NetworkStateProvider | None,
         coordination_node: str,
         current_time: float = 0.0,
+        all_coordination_nodes: list[str] | None = None,
     ) -> tuple[str | None, float, float | None]:
         """
         Select responder using weighted score of predictability, recency, and proximity.
@@ -486,6 +498,9 @@ class AdaptiveCoordinator(CoordinatorBase):
 
         where R_norm = 1 − min(Δt / T_REF, 1.0) and T_REF = 1800 s (i_typ).
 
+        When multiple coordination nodes are available, uses max P and most
+        recent encounter across all coord nodes to avoid single-node isolation.
+
         Sources:
             Shah & Ahmed (2025) — absolute DP values
             Boondirek et al. (2014) — distance-dominant weighting
@@ -496,8 +511,10 @@ class AdaptiveCoordinator(CoordinatorBase):
             task: Task to assign
             responder_locator: Provider of responder locations
             network_state: Provider of network state
-            coordination_node: Coordination node
+            coordination_node: Primary coordination node
             current_time: Current simulation time (for recency calculation)
+            all_coordination_nodes: All coordination node IDs for multi-node
+                P-value queries (uses max P across all coord nodes)
 
         Returns:
             (responder_id, distance, predictability) or (None, 0, None)
@@ -511,13 +528,17 @@ class AdaptiveCoordinator(CoordinatorBase):
         # T_REF matches PRoPHET i_typ parameter (seconds) — inter-encounter half-life
         T_REF = 1800.0
 
+        # Use all coord nodes for P queries to avoid single-node isolation
+        coord_nodes_to_query = all_coordination_nodes or [coordination_node]
+
         # First pass: collect all reachable candidates with their metrics
         candidates = []
 
         for responder_id in responders:
-            # Check communication path availability
-            predictability = network_state.get_delivery_predictability(
-                coordination_node, responder_id
+            # Check communication path availability using max P across all coord nodes
+            predictability = max(
+                network_state.get_delivery_predictability(cn, responder_id)
+                for cn in coord_nodes_to_query
             )
 
             if predictability <= threshold:
@@ -532,9 +553,10 @@ class AdaptiveCoordinator(CoordinatorBase):
                 ry,
             )
 
-            # Encounter recency: R_norm = 1 − min(Δt / T_REF, 1.0)
-            last_enc = network_state.get_last_encounter_time(
-                coordination_node, responder_id
+            # Encounter recency: use most recent encounter across all coord nodes
+            last_enc = max(
+                network_state.get_last_encounter_time(cn, responder_id)
+                for cn in coord_nodes_to_query
             )
             delta_t = max(0.0, current_time - last_enc)
             r_norm = 1.0 - min(delta_t / T_REF, 1.0)
@@ -621,6 +643,7 @@ class BaselineCoordinator(CoordinatorBase):
         network_state: NetworkStateProvider | None,
         coordination_node: str,
         current_time: float,
+        all_coordination_nodes: list[str] | None = None,  # noqa: ARG002 - baseline ignores
     ) -> list[Assignment]:
         """
         Assign tasks using baseline algorithm.
@@ -634,6 +657,7 @@ class BaselineCoordinator(CoordinatorBase):
             network_state: Not used by baseline (can be None)
             coordination_node: Coordination node making assignments
             current_time: Current simulation time
+            all_coordination_nodes: Not used by baseline
 
         Returns:
             List of new assignments
@@ -706,6 +730,7 @@ class BaselineCoordinator(CoordinatorBase):
         network_state: NetworkStateProvider | None,  # noqa: ARG002 - baseline ignores
         coordination_node: str,  # noqa: ARG002 - baseline ignores
         current_time: float = 0.0,  # noqa: ARG002 - baseline ignores
+        all_coordination_nodes: list[str] | None = None,  # noqa: ARG002 - baseline ignores
     ) -> tuple[str | None, float, float | None]:
         """
         Select nearest responder by proximity only.
@@ -718,6 +743,7 @@ class BaselineCoordinator(CoordinatorBase):
             network_state: Ignored by baseline
             coordination_node: Not used
             current_time: Not used by baseline
+            all_coordination_nodes: Not used by baseline
 
         Returns:
             (responder_id, distance, None)
@@ -807,6 +833,7 @@ class CoordinationManager:
         network_state: NetworkStateProvider | None,
         coordination_node: str,
         current_time: float,
+        all_coordination_nodes: list[str] | None = None,
     ) -> list[Assignment]:
         """
         Run a coordination cycle to assign pending tasks.
@@ -816,6 +843,8 @@ class CoordinationManager:
             network_state: Provider of network state
             coordination_node: Coordination node making assignments
             current_time: Current simulation time
+            all_coordination_nodes: All coordination node IDs for multi-node
+                P-value queries (passed through to coordinator)
 
         Returns:
             List of new assignments made in this cycle
@@ -837,6 +866,7 @@ class CoordinationManager:
             network_state=network_state,
             coordination_node=coordination_node,
             current_time=current_time,
+            all_coordination_nodes=all_coordination_nodes,
         )
 
         # Track assignments

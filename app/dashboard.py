@@ -214,7 +214,7 @@ with tab_run:
 
         evaluator = PerformanceEvaluator(results)
         st.session_state.report = evaluator.generate_report(
-            metrics=[MetricType.DELIVERY_RATE, MetricType.ASSIGNMENT_RATE, MetricType.RESPONSE_TIME]
+            metrics=[MetricType.DELIVERY_RATE, MetricType.ASSIGNMENT_RATE, MetricType.RESPONSE_TIME, MetricType.DELIVERY_TIME]
         )
 
         st.success(f"Experiment completed: {len(results)} simulation runs")
@@ -223,7 +223,7 @@ with tab_run:
         st.subheader("Summary Statistics")
         summary_df = (
             st.session_state.df
-            .groupby(["algorithm", "connectivity"])[["delivery_rate", "assignment_rate", "avg_response_time"]]
+            .groupby(["algorithm", "connectivity"])[["delivery_rate", "assignment_rate", "avg_response_time", "avg_delivery_time"]]
             .agg(["mean", "std", "min", "max"])
             .round(4)
         )
@@ -246,9 +246,10 @@ with tab_viz:
 
         # Grouped bar charts
         st.subheader("Algorithm Comparison (Grouped Bar Charts)")
-        bar_cols = st.columns(3)
+        n_metrics = len(METRICS_CONFIG)
+        bar_cols = st.columns(min(n_metrics, 4))
         for i, metric_key in enumerate(METRICS_CONFIG):
-            with bar_cols[i]:
+            with bar_cols[i % len(bar_cols)]:
                 fig = plot_grouped_bars(summaries[metric_key], metric_key)
                 st.pyplot(fig)
 
@@ -282,6 +283,7 @@ with tab_viz:
                 "fig_delivery_rate_bars": plot_grouped_bars(summaries["delivery_rate"], "delivery_rate"),
                 "fig_assignment_rate_bars": plot_grouped_bars(summaries["assignment_rate"], "assignment_rate"),
                 "fig_response_time_bars": plot_grouped_bars(summaries["avg_response_time"], "avg_response_time"),
+                "fig_delivery_time_bars": plot_grouped_bars(summaries["avg_delivery_time"], "avg_delivery_time"),
                 "fig_box_distributions": plot_box_distributions(df),
                 "fig_heatmap": plot_heatmap(df),
                 "fig_degradation_lines": plot_degradation_lines(summaries),
@@ -542,8 +544,22 @@ with tab_findings:
                 f"{best.improvement:+.2f}% improvement",
             )
 
+        # Delivery time advantage
+        dt_comps = [c for c in report.comparisons
+                    if c.metric == MetricType.DELIVERY_TIME
+                    and c.connectivity_level is not None]
+        if dt_comps:
+            best_dt = min(dt_comps, key=lambda c: c.improvement)  # most negative = faster
+            conn_label = f"{int(best_dt.connectivity_level * 100)}%"
+            st.subheader("3. Fastest Delivery Advantage")
+            st.metric(
+                f"At {conn_label} connectivity",
+                f"{best_dt.improvement:+.1f}%",
+                delta_color="inverse",  # negative is good here
+            )
+
         # Connectivity effect
-        st.subheader("3. Connectivity Effect (ANOVA)")
+        st.subheader("4. Connectivity Effect (ANOVA)")
         for key, anova in report.anova_results.items():
             parts = key.rsplit("_", 1)
             metric_name = parts[0].replace("_", " ").title()
