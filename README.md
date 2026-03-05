@@ -3,7 +3,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A discrete-event simulation framework for evaluating adaptive scheduling algorithms in emergency response coordination under intermittent connectivity. Integrates PRoPHET-inspired delay-tolerant networking (DTN) with multi-agent task assignment and Random Waypoint mobility.
+A discrete-event simulation framework for evaluating adaptive scheduling algorithms in emergency response coordination under intermittent connectivity. Integrates PRoPHETv2 delay-tolerant networking (DTN) with multi-agent task assignment and role-based Random Waypoint mobility.
 
 ## Research Questions
 
@@ -20,8 +20,8 @@ Phase 6  VISUALIZATION       plots, dashboard, notebook, animation, diagnostics
 Phase 5  SIMULATION ENGINE   discrete-event queue, orchestration
 Phase 4  COORDINATION        Adaptive (urgency-first, weighted scoring) vs Baseline (FCFS)
 Phase 3  SCENARIOS           Poisson task arrivals, urgency distribution
-Phase 2  COMMUNICATION       PRoPHET store-and-forward, message buffers, predictability
-Phase 1  NETWORK             two-zone topology, Random Waypoint mobility, connectivity model
+Phase 2  COMMUNICATION       PRoPHETv2 store-and-forward, message buffers, predictability
+Phase 1  NETWORK             two-zone topology, role-based Random Waypoint mobility, connectivity model
 ```
 
 ## Project Structure
@@ -29,8 +29,8 @@ Phase 1  NETWORK             two-zone topology, Random Waypoint mobility, connec
 ```
 src/ercs/
 ├── config/          # Pydantic parameter models and YAML validation
-├── network/         # Topology generation (NetworkX) and Random Waypoint mobility
-├── communication/   # PRoPHET DTN protocol, message buffers, predictability matrix
+├── network/         # Topology generation (NetworkX) and role-based Random Waypoint mobility
+├── communication/   # PRoPHETv2 DTN protocol, message buffers, predictability matrix
 ├── scenario/        # Emergency task generation (Poisson arrivals)
 ├── coordination/    # Adaptive and Baseline scheduling algorithms
 ├── simulation/      # Discrete-event engine and experiment runner
@@ -39,7 +39,8 @@ src/ercs/
 
 app/dashboard.py             # Streamlit interactive dashboard (6 tabs)
 notebooks/experiment_report.ipynb  # Thesis-quality static analysis notebook
-scripts/                     # CLI tools: experiment, animation (6 modes), diagnostics
+scripts/                     # CLI tools: experiment, animation, diagnostics
+configs/default.yaml         # Default experiment configuration
 ```
 
 ## Installation
@@ -144,23 +145,31 @@ python scripts/diagnose_encounters.py --connectivity 0.20
 | Parameter | Value | Source |
 |-----------|-------|--------|
 | Node count | 50 (2 coordination + 48 mobile) | Ullah & Qayyum (2022) |
-| Simulation area | 3000 × 1500 m | Ullah & Qayyum (2022) |
-| Incident zone | 700 × 600 m, origin (0, 450) | Ullah & Qayyum (2022) |
-| Coordination zone | 50 × 50 m, origin (800, 300) | Design decision |
+| Simulation area | 3000 x 1500 m | Ullah & Qayyum (2022) |
+| Incident zone | 700 x 600 m, origin (0, 450) | Ullah & Qayyum (2022) |
+| Coordination zone | 50 x 50 m, origin (800, 300) | Design decision |
 | Radio range | 100 m | Ullah & Qayyum (2022) |
 | Buffer size | 25 MB (26,214,400 bytes) | Ullah & Qayyum (2022) |
 | Message size | 500 kB (512,000 bytes) | Kumar et al. (2023) |
 | Connectivity scenarios | 75%, 40%, 20% | Karaman et al. (2026) |
-| Mobility model | Random Waypoint | Ullah & Qayyum (2022) |
-| Speed range | 0–20 m/s (min 1 m/s enforced) | Ullah & Qayyum (2022) |
+| Mobility model | Role-based Random Waypoint | Ullah & Qayyum (2022); Aschenbruck et al. (2009) |
 
-### PRoPHET Protocol
+### Role-Based Mobility
+
+| Role | Proportion | Zone Constraint | Speed Range |
+|------|-----------|-----------------|-------------|
+| RESCUE | ~60% | Incident zone only | 1-5 m/s |
+| TRANSPORT | ~25% | Shuttle incident <-> coordination | 5-20 m/s |
+| LIAISON | ~15% | Full simulation area | 1-10 m/s |
+
+### PRoPHETv2 Protocol
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
-| P_init | 0.75 | Kumar et al. (2023) |
-| β (transitivity) | 0.25 | Kumar et al. (2023) |
-| γ (aging) | 0.98 | Kumar et al. (2023) |
+| P_enc_max | 0.5 | Grasic et al. (2011) |
+| I_typ (inter-encounter interval) | 1800 s | Grasic et al. (2011) |
+| beta (transitivity) | 0.9 | Grasic et al. (2011) |
+| gamma (aging) | 0.999885791 | Grasic et al. (2011) |
 | Aging interval | 30 s | Kumar et al. (2023) |
 | Message TTL | 300 min (18,000 s) | Ullah & Qayyum (2022) |
 | Transmit speed | 2 Mbps | Ullah & Qayyum (2022) |
@@ -174,6 +183,7 @@ python scripts/diagnose_encounters.py --connectivity 0.20
 | Message rate | 2 msgs/min | Kumar et al. (2023) |
 | Urgency distribution | 20% High, 50% Medium, 30% Low | Li et al. (2025) |
 | Simulation duration | 6000 s (~100 min) | Ullah & Qayyum (2022) |
+| Warm-up period | 0 s (cold-start) | Grassmann (2008) |
 
 ### Coordination
 
@@ -181,20 +191,21 @@ python scripts/diagnose_encounters.py --connectivity 0.20
 |-----------|-------|--------|
 | Coordination interval | 30 min (1800 s) | Kaji et al. (2025) |
 | Priority levels | 3 | Rosas et al. (2023) |
-| Path threshold (Adaptive) | P > 0 | Ullah & Qayyum (2022) |
-| Scoring weights (Adaptive) | α=0.5 predictability, β=0.5 proximity | Kumar et al. (2023) |
+| Path threshold (Adaptive) | P > 0.3 | Ullah & Qayyum (2022) |
+| Scoring weights (Adaptive) | alpha=0.2 predict., gamma_r=0.2 recency, beta=0.6 proximity | Boondirek et al. (2014); Nelson et al. (2009) |
+| Workload penalty (Adaptive) | lambda=0.2 | Cui et al. (2022) |
 
 ### Experimental Design
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
 | Runs per configuration | 30 | Law (2015) |
-| Total configurations | 6 (2 algorithms × 3 connectivity) | — |
-| Total experimental runs | 180 | — |
+| Total configurations | 6 (2 algorithms x 3 connectivity) | -- |
+| Total experimental runs | 180 | -- |
 
 ## Algorithms
 
-**Adaptive Coordinator**: Prioritises tasks by urgency (High > Medium > Low). Filters responders by communication reachability (P > 0), then selects using a weighted score: `Score = 0.5 × P_norm + 0.5 × D_norm`, balancing delivery predictability with physical proximity.
+**Adaptive Coordinator**: Prioritises tasks by urgency (High > Medium > Low). Filters responders by communication reachability (P > 0.3), then selects using a weighted score: `Score = 0.2 x P_abs + 0.2 x R_norm + 0.6 x D_norm - 0.2 x W_penalty`, balancing delivery predictability, encounter recency, and physical proximity while penalising already-assigned responders.
 
 **Baseline Coordinator**: FCFS task ordering, assigns to nearest responder by Euclidean distance regardless of network connectivity.
 
@@ -205,19 +216,19 @@ python scripts/diagnose_encounters.py --connectivity 0.20
 - **Response Time**: Time from task creation to assignment
 - **Delivery Time**: Time from task creation to message delivery
 
-Statistical analysis includes Welch's independent t-tests, one-way ANOVA, Cohen's d effect sizes, and eta-squared (η²) with 95% confidence intervals.
+Statistical analysis includes Welch's independent t-tests, one-way ANOVA, Cohen's d effect sizes, and eta-squared (eta^2) with 95% confidence intervals.
 
 ## Testing
 
 ```bash
-pytest                    # Run all 281 tests
+pytest                    # Run all 384 tests
 pytest --cov=ercs         # With coverage
 pytest -m "not slow"      # Skip slow tests
 ```
 
 ## Documentation
 
-See [`docs/GUIDE.md`](docs/GUIDE.md) for the complete architecture guide, event cascade details, PRoPHET equations, and visualization reference.
+See [`docs/GUIDE.md`](docs/GUIDE.md) for the complete architecture guide, event cascade details, PRoPHETv2 equations, and visualization reference.
 
 ## Academic Context
 
