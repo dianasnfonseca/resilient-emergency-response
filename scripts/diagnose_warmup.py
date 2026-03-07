@@ -108,8 +108,8 @@ def quick_comparison(config, connectivity_levels, runs_per_config, base_seed):
                 r = engine.run(run_number=run)
                 delivery_rates.append(r.delivery_rate)
                 assignment_rates.append(r.assignment_rate)
-                if r.average_response_time is not None:
-                    response_times.append(r.average_response_time)
+                if r.average_decision_time is not None:
+                    response_times.append(r.average_decision_time)
 
                 done += 1
                 pct = done / total * 100

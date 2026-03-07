@@ -336,14 +336,19 @@ class AdaptiveCoordinator(CoordinatorBase):
     3. Calculates a weighted score combining predictability, recency, and proximity
     4. Selects the responder with highest combined score
 
-    Score = α × P_abs + γ_r × R_norm + β × D_norm − λ × W_penalty
+    Score = α × P_abs + γ_r × R_norm + β × D_norm − λ × W_inter
 
     - P_abs: absolute delivery predictability (already in [0, 1])
     - R_norm: encounter recency = 1 − min(Δt / 1800, 1.0), where Δt is time
       since last direct encounter with the coordination node
     - D_norm: 1 - (distance / area_diagonal), using the fixed simulation diagonal
-    - W_penalty: 1 if the responder was assigned in the prior cycle, else 0
+    - W_inter: 1 if the responder was assigned in a previous cycle, else 0
     - α = 0.2, γ_r = 0.2, β = 0.6, λ = 0.2
+
+    Intra-cycle load is enforced as a hard capacity exclusion (b-matching)
+    rather than a soft score penalty, following Bhatti et al. (2021, IEEE
+    Trans. Mobile Computing, 20(8)).  k_max = floor(T/R) + 1 caps the
+    maximum tasks any single responder can receive per coordination cycle.
 
     Encounter recency addresses P-value saturation: under Random Waypoint
     mobility, PRoPHET P values converge to near-uniform ~0.45–0.50 for all
@@ -355,7 +360,7 @@ class AdaptiveCoordinator(CoordinatorBase):
         - Boondirek et al. (2014): Distance-dominant weighting (DiPRoPHET)
         - Nelson et al. (2009): Encounter-based routing, recency as signal
         - Shah & Ahmed (2025): Absolute DP values (SN Computer Science)
-        - Cui et al. (2022): Workload-aware scoring (AdaptiveSpray)
+        - Bhatti et al. (2021): Bounded task assignment (b-matching)
         - Kaji et al. (2025): Urgency-first prioritisation, 30-min interval
         - Ullah & Qayyum (2022): P > threshold, predictability-based selection
     """
@@ -370,6 +375,10 @@ class AdaptiveCoordinator(CoordinatorBase):
             UrgencyLevel.MEDIUM: 1,
             UrgencyLevel.LOW: 2,
         }
+
+        # Last cycle diagnostics — exposed for verification
+        self._last_cycle_k_max: int = 0
+        self._last_cycle_max_load: int = 0
 
     def assign_tasks(
         self,
@@ -417,6 +426,24 @@ class AdaptiveCoordinator(CoordinatorBase):
 
         assignments = []
 
+        # Capacity-bounded assignment: Bhatti et al. (2021)
+        # "An approximation algorithm for bounded task assignment problem
+        # in spatial crowdsourcing", IEEE Trans. Mobile Computing, 20(8).
+        # k_max = floor(T/R) + 1 enforces b-matching upper bound per cycle.
+        pending_tasks = [t for t in sorted_tasks if t.task_id not in self._assignments]
+        coord_nodes_to_query = all_coordination_nodes or [coordination_node]
+        responders = responder_locator.get_all_responder_ids()
+        eligible_count = sum(
+            1 for r in responders
+            if max(
+                network_state.get_delivery_predictability(cn, r)
+                for cn in coord_nodes_to_query
+            ) > self.params.available_path_threshold
+        )
+        k_max = (len(pending_tasks) // max(eligible_count, 1)) + 1
+        self._last_cycle_k_max = k_max
+        current_cycle_load: dict[str, int] = {}
+
         for task in sorted_tasks:
             # Skip already assigned tasks
             if task.task_id in self._assignments:
@@ -427,6 +454,8 @@ class AdaptiveCoordinator(CoordinatorBase):
                 task, responder_locator, network_state, coordination_node,
                 current_time=current_time,
                 all_coordination_nodes=all_coordination_nodes,
+                current_cycle_load=current_cycle_load,
+                k_max=k_max,
             )
 
             if responder_id is not None:
@@ -444,6 +473,9 @@ class AdaptiveCoordinator(CoordinatorBase):
                 # Record assignment
                 self._record_assignment(assignment)
                 assignments.append(assignment)
+
+                # Track intra-cycle load for capacity exclusion (Bhatti et al., 2021)
+                current_cycle_load[responder_id] = current_cycle_load.get(responder_id, 0) + 1
 
                 # Compute recency for this assignment (for logging)
                 T_REF = 1800.0
@@ -477,6 +509,11 @@ class AdaptiveCoordinator(CoordinatorBase):
                     urgency=task.urgency.value,
                 )
 
+        # Record max observed load for diagnostic verification
+        self._last_cycle_max_load = (
+            max(current_cycle_load.values()) if current_cycle_load else 0
+        )
+
         return assignments
 
     def _select_responder(
@@ -487,16 +524,21 @@ class AdaptiveCoordinator(CoordinatorBase):
         coordination_node: str,
         current_time: float = 0.0,
         all_coordination_nodes: list[str] | None = None,
+        current_cycle_load: dict[str, int] | None = None,
+        k_max: int | None = None,
     ) -> tuple[str | None, float, float | None]:
         """
         Select responder using weighted score of predictability, recency, and proximity.
 
         Considers only responders with P > threshold (available communication
-        path), then calculates a combined score:
+        path) and not yet at capacity (k_max), then calculates a combined score:
 
-        Score = α × P_abs + γ_r × R_norm + β × D_norm − λ × W_penalty
+        Score = α × P_abs + γ_r × R_norm + β × D_norm − λ × W_inter
 
         where R_norm = 1 − min(Δt / T_REF, 1.0) and T_REF = 1800 s (i_typ).
+        W_inter = 1.0 if responder was assigned in a previous cycle, else 0.0.
+        Intra-cycle load is enforced as a hard capacity exclusion (k_max),
+        not as a score penalty (Bhatti et al., 2021).
 
         When multiple coordination nodes are available, uses max P and most
         recent encounter across all coord nodes to avoid single-node isolation.
@@ -504,7 +546,7 @@ class AdaptiveCoordinator(CoordinatorBase):
         Sources:
             Shah & Ahmed (2025) — absolute DP values
             Boondirek et al. (2014) — distance-dominant weighting
-            Cui et al. (2022) — workload-aware scoring
+            Bhatti et al. (2021) — bounded task assignment (b-matching)
             Nelson et al. (2009) — encounter recency as routing signal
 
         Args:
@@ -515,10 +557,14 @@ class AdaptiveCoordinator(CoordinatorBase):
             current_time: Current simulation time (for recency calculation)
             all_coordination_nodes: All coordination node IDs for multi-node
                 P-value queries (uses max P across all coord nodes)
+            current_cycle_load: Tasks assigned per responder in current cycle
+            k_max: Maximum tasks per responder per cycle (hard exclusion)
 
         Returns:
             (responder_id, distance, predictability) or (None, 0, None)
         """
+        if current_cycle_load is None:
+            current_cycle_load = {}
         if network_state is None:
             return None, 0.0, None
 
@@ -535,6 +581,11 @@ class AdaptiveCoordinator(CoordinatorBase):
         candidates = []
 
         for responder_id in responders:
+            # Hard capacity exclusion (replaces W_intra soft penalty)
+            # Bhatti et al. (2021) — b-matching upper bound per cycle
+            if k_max is not None and current_cycle_load.get(responder_id, 0) >= k_max:
+                continue  # responder is saturated for this cycle
+
             # Check communication path availability using max P across all coord nodes
             predictability = max(
                 network_state.get_delivery_predictability(cn, responder_id)
@@ -594,15 +645,14 @@ class AdaptiveCoordinator(CoordinatorBase):
             # Normalise distance against fixed simulation diagonal
             d_norm = 1.0 - (candidate["distance"] / SIMULATION_AREA_DIAGONAL_M)
 
-            # Workload penalty — discourage re-assigning same responder
-            w_penalty = 1.0 if candidate["id"] in self._responder_assignments else 0.0
-
-            # Calculate weighted score
+            # Score = α×P_abs + γ_r×R_norm + β×D_norm − λ×W_inter
+            # W_intra removed — load enforced as hard exclusion, not score penalty
+            w_inter = 1.0 if candidate["id"] in self._responder_assignments else 0.0
             score = (
                 alpha * p_abs
                 + gamma_r * r_norm
                 + beta * d_norm
-                - WORKLOAD_PENALTY_WEIGHT * w_penalty
+                - WORKLOAD_PENALTY_WEIGHT * w_inter
             )
 
             if score > best_score:

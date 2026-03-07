@@ -135,10 +135,10 @@ class TestSimulationResults:
         """Test assignment rate calculation."""
         assert sample_results.assignment_rate == pytest.approx(0.80)  # 80/100
 
-    def test_average_response_time(self, sample_results: SimulationResults):
+    def test_average_decision_time(self, sample_results: SimulationResults):
         """Test average response time calculation."""
         expected = (30.0 + 45.0 + 25.0) / 3
-        assert sample_results.average_response_time == pytest.approx(expected)
+        assert sample_results.average_decision_time == pytest.approx(expected)
 
     def test_average_delivery_time(self, sample_results: SimulationResults):
         """Test average delivery time calculation."""
@@ -157,7 +157,7 @@ class TestSimulationResults:
 
         assert results.delivery_rate == 0.0
         assert results.assignment_rate == 0.0
-        assert results.average_response_time is None
+        assert results.average_decision_time is None
         assert results.average_delivery_time is None
 
     def test_summary(self, sample_results: SimulationResults):
@@ -882,7 +882,7 @@ class TestSimulationIntegration:
         # Should have response times for assigned tasks
         if results.tasks_assigned > 0:
             assert len(results.response_times) > 0
-            assert results.average_response_time is not None
+            assert results.average_decision_time is not None
 
 
 # =============================================================================

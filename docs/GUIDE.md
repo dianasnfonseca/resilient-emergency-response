@@ -638,7 +638,7 @@ from ercs.simulation import run_simulation
 results = run_simulation("adaptive", connectivity_level=0.75, random_seed=42)
 print(f"Delivery rate: {results.delivery_rate:.2%}")
 print(f"Assignment rate: {results.assignment_rate:.2%}")
-print(f"Avg response time: {results.average_response_time:.1f}s")
+print(f"Avg decision time: {results.average_decision_time:.1f}s")
 ```
 
 ### Full experiment (180 runs)

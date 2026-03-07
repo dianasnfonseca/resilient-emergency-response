@@ -611,7 +611,7 @@ def diagnose_coordination(config: SimulationConfig, seed: int = 42) -> None:
         print(f"    Tasks assigned: {result.tasks_assigned} ({result.assignment_rate:.1%})")
         print(f"    Msgs created:   {result.messages_created}")
         print(f"    Msgs delivered: {result.messages_delivered} ({result.delivery_rate:.1%})")
-        avg_rt = result.average_response_time
+        avg_rt = result.average_decision_time
         print(f"    Avg resp time:  {avg_rt:.1f}s" if avg_rt else "    Avg resp time:  N/A")
 
 

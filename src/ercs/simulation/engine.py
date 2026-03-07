@@ -112,9 +112,9 @@ class SimulationResults:
         delivery_rate: Successful delivery percentage
 
         # Timing metrics
-        response_times: List of (task_id, response_time) pairs
-        average_response_time: Mean response time
-        response_time_by_urgency: Response times grouped by urgency
+        response_times: List of (task_id, decision_time) pairs
+        average_decision_time: Mean coordinator decision latency
+        response_time_by_urgency: Decision times grouped by urgency
 
         # Event log
         events: All simulation events
@@ -141,6 +141,10 @@ class SimulationResults:
     response_times: list[tuple[str, float]] = field(default_factory=list)
     delivery_times: list[tuple[str, float]] = field(default_factory=list)
 
+    # Coordination cycle tracking — System Availability (Karaman et al., 2026)
+    total_coordination_cycles: int = 0
+    active_coordination_cycles: int = 0
+
     # Events
     events: list[SimulationEvent] = field(default_factory=list)
 
@@ -159,8 +163,15 @@ class SimulationResults:
         return self.tasks_assigned / self.total_tasks
 
     @property
-    def average_response_time(self) -> float | None:
-        """Calculate average response time (assignment - creation)."""
+    def average_decision_time(self) -> float | None:
+        """Average coordinator decision latency (assignment_time - creation_time).
+
+        NOTE: This is NOT the Coordination Response Time defined in SpecDesign
+        Section 1.4.10. The SpecDesign metric (delivery_time - creation_time)
+        is average_delivery_time.
+        Source: distinguished from DTN end-to-end delay
+        (Ullah & Qayyum, 2022; Rosas et al., 2023).
+        """
         if not self.response_times:
             return None
         times = [t for _, t in self.response_times]
@@ -174,6 +185,16 @@ class SimulationResults:
         times = [t for _, t in self.delivery_times]
         return sum(times) / len(times)
 
+    @property
+    def system_availability(self) -> float | None:
+        """System Availability = Active Cycles / Total Cycles × 100%.
+
+        Source: Karaman et al. (2026); SpecDesign Section 1.4.10
+        """
+        if self.total_coordination_cycles == 0:
+            return None
+        return (self.active_coordination_cycles / self.total_coordination_cycles) * 100.0
+
     def summary(self) -> dict:
         """Generate results summary."""
         return {
@@ -186,7 +207,7 @@ class SimulationResults:
             "messages_created": self.messages_created,
             "messages_delivered": self.messages_delivered,
             "delivery_rate": self.delivery_rate,
-            "average_response_time": self.average_response_time,
+            "average_decision_time": self.average_decision_time,
             "average_delivery_time": self.average_delivery_time,
         }
 
@@ -633,6 +654,25 @@ class SimulationEngine:
             all_coordination_nodes=coord_nodes,
         )
 
+        # Track coordination cycles for System Availability (Karaman et al., 2026)
+        results.total_coordination_cycles += 1
+        if len(assignments) > 0:
+            results.active_coordination_cycles += 1
+
+        # Log k_max for capacity-bound diagnostics (adaptive only)
+        k_max = getattr(self._coordinator, "_last_cycle_k_max", None)
+        if k_max is not None:
+            max_load = getattr(self._coordinator, "_last_cycle_max_load", 0)
+            self._log_event(
+                SimulationEventType.COORDINATION_CYCLE,
+                event.timestamp,
+                {
+                    "k_max": k_max,
+                    "max_observed_load": max_load,
+                    "assignments": len(assignments),
+                },
+            )
+
         # Process assignments — distribute messages across coord nodes (round-robin)
         for i, assignment in enumerate(assignments):
             results.tasks_assigned += 1
@@ -674,6 +714,7 @@ class SimulationEngine:
                     "task_id": assignment.task_id,
                     "responder_id": assignment.responder_id,
                     "response_time": response_time,
+                    "urgency": assignment.task.urgency.value,
                 },
             )
 

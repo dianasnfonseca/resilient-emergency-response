@@ -25,7 +25,7 @@ import numpy as np
 from scipy import stats
 
 from ercs.config.parameters import AlgorithmType
-from ercs.simulation.engine import SimulationResults
+from ercs.simulation.engine import SimulationEventType, SimulationResults
 
 
 class MetricType(str, Enum):
@@ -33,7 +33,7 @@ class MetricType(str, Enum):
 
     DELIVERY_RATE = "delivery_rate"
     ASSIGNMENT_RATE = "assignment_rate"
-    RESPONSE_TIME = "response_time"
+    DECISION_TIME = "decision_time"
     DELIVERY_TIME = "delivery_time"
     MESSAGES_CREATED = "messages_created"
     MESSAGES_DELIVERED = "messages_delivered"
@@ -275,7 +275,7 @@ class MetricExtractor:
     _extractors: dict[MetricType, Callable[[SimulationResults], float | None]] = {
         MetricType.DELIVERY_RATE: lambda r: r.delivery_rate,
         MetricType.ASSIGNMENT_RATE: lambda r: r.assignment_rate,
-        MetricType.RESPONSE_TIME: lambda r: r.average_response_time,
+        MetricType.DECISION_TIME: lambda r: r.average_decision_time,
         MetricType.DELIVERY_TIME: lambda r: r.average_delivery_time,
         MetricType.MESSAGES_CREATED: lambda r: float(r.messages_created),
         MetricType.MESSAGES_DELIVERED: lambda r: float(r.messages_delivered),
@@ -676,7 +676,7 @@ class PerformanceEvaluator:
             EvaluationReport with all analyses
         """
         if metrics is None:
-            metrics = [MetricType.DELIVERY_RATE, MetricType.RESPONSE_TIME]
+            metrics = [MetricType.DELIVERY_RATE, MetricType.DECISION_TIME]
 
         report = EvaluationReport()
 
@@ -710,6 +710,57 @@ class PerformanceEvaluator:
 
         return report
 
+    def compute_system_availability(
+        self, results: list[SimulationResults],
+    ) -> DescriptiveStats:
+        """Aggregate System Availability across runs.
+
+        Formula: Active Coordination Cycles / Total Coordination Cycles × 100%
+        Source: Karaman et al. (2026); SpecDesign Section 1.4.10
+        """
+        availabilities = [
+            r.system_availability
+            for r in results
+            if r.system_availability is not None
+        ]
+        return self.analyzer.descriptive_stats(availabilities)
+
+    def compute_urgency_stratified_delivery(
+        self, results: list[SimulationResults],
+    ) -> dict[str, DescriptiveStats]:
+        """Delivery rate stratified by urgency level (H/M/L).
+
+        Source: Oksuz & Satoglu (2024); Rosas et al. (2023);
+        SpecDesign Section 1.4.10
+        """
+        urgency_levels = ["H", "M", "L"]
+        per_urgency_rates: dict[str, list[float]] = {u: [] for u in urgency_levels}
+
+        for result in results:
+            # Assignments per urgency (requires urgency field in TASK_ASSIGNED events)
+            assigned_by_urgency: dict[str, set[str]] = {u: set() for u in urgency_levels}
+            for event in result.events:
+                if event.event_type == SimulationEventType.TASK_ASSIGNED:
+                    urgency = event.data.get("urgency")
+                    task_id = event.data.get("task_id")
+                    if urgency and task_id and urgency in urgency_levels:
+                        assigned_by_urgency[urgency].add(task_id)
+
+            # Tasks delivered (from delivery_times already in results)
+            delivered_task_ids = {task_id for task_id, _ in result.delivery_times}
+
+            for urgency in urgency_levels:
+                assigned = assigned_by_urgency[urgency]
+                if len(assigned) > 0:
+                    delivered = len(assigned & delivered_task_ids)
+                    per_urgency_rates[urgency].append(delivered / len(assigned))
+
+        return {
+            u: self.analyzer.descriptive_stats(rates)
+            for u, rates in per_urgency_rates.items()
+            if rates  # only include urgency levels with data
+        }
+
     def _generate_summary(self) -> dict:
         """Generate summary statistics."""
         adaptive = [r for r in self.results if r.algorithm == AlgorithmType.ADAPTIVE]
@@ -732,7 +783,7 @@ class PerformanceEvaluator:
         print("=" * 60)
 
         # Overall comparison
-        for metric in [MetricType.DELIVERY_RATE, MetricType.RESPONSE_TIME]:
+        for metric in [MetricType.DELIVERY_RATE, MetricType.DECISION_TIME]:
             print(f"\n{metric.value.upper()}")
             print("-" * 40)
 

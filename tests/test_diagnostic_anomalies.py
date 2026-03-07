@@ -278,7 +278,7 @@ class TestResponseTimeSemantics:
 
         results.response_times.append(("t_0", expected_response_time))
 
-        assert results.average_response_time == pytest.approx(1700.0)
+        assert results.average_decision_time == pytest.approx(1700.0)
 
     def test_response_time_independent_of_connectivity(self):
         """
@@ -310,7 +310,7 @@ class TestResponseTimeSemantics:
             ]
 
         # Response times are identical
-        assert results_75.average_response_time == results_40.average_response_time
+        assert results_75.average_decision_time == results_40.average_decision_time
 
     def test_delivery_time_differs_from_response_time(self):
         """Delivery time (network latency) is distinct from response time."""
@@ -328,9 +328,9 @@ class TestResponseTimeSemantics:
         # Delivery time = actual_delivery - creation = 2500s (message took 800s to arrive)
         results.delivery_times = [("t_0", 2500.0)]
 
-        assert results.average_response_time == pytest.approx(1700.0)
+        assert results.average_decision_time == pytest.approx(1700.0)
         assert results.average_delivery_time == pytest.approx(2500.0)
-        assert results.average_delivery_time > results.average_response_time
+        assert results.average_delivery_time > results.average_decision_time
 
 
 # ============================================================================

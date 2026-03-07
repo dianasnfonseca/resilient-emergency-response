@@ -325,7 +325,7 @@ class TestMetricExtractor:
 
     def test_extract_response_time(self, sample_result: SimulationResults):
         """Test extracting response time."""
-        values = MetricExtractor.extract([sample_result], MetricType.RESPONSE_TIME)
+        values = MetricExtractor.extract([sample_result], MetricType.DECISION_TIME)
 
         assert len(values) == 1
         assert values[0] == pytest.approx(35.0)  # (30+40)/2
@@ -346,9 +346,9 @@ class TestMetricExtractor:
             run_number=0,
             random_seed=42,
         )
-        # No response times set -> average_response_time is None
+        # No response times set -> average_decision_time is None
 
-        values = MetricExtractor.extract([result], MetricType.RESPONSE_TIME)
+        values = MetricExtractor.extract([result], MetricType.DECISION_TIME)
 
         assert len(values) == 0  # None filtered out
 
@@ -452,6 +452,156 @@ class TestEvaluateResults:
 
         assert isinstance(report, EvaluationReport)
         assert len(report.comparisons) > 0
+
+
+# =============================================================================
+# Test System Availability (Mudança 3)
+# =============================================================================
+
+
+class TestSystemAvailability:
+    """Tests for System Availability metric (Karaman et al., 2026)."""
+
+    def test_system_availability_full(self):
+        """All cycles active → 100%."""
+        result = SimulationResults(
+            config=SimulationConfig(),
+            algorithm=AlgorithmType.ADAPTIVE,
+            connectivity_level=0.75,
+            run_number=0,
+            random_seed=42,
+        )
+        result.total_coordination_cycles = 10
+        result.active_coordination_cycles = 10
+
+        assert result.system_availability == pytest.approx(100.0)
+
+    def test_system_availability_partial(self):
+        """7 of 10 cycles active → 70%."""
+        result = SimulationResults(
+            config=SimulationConfig(),
+            algorithm=AlgorithmType.ADAPTIVE,
+            connectivity_level=0.75,
+            run_number=0,
+            random_seed=42,
+        )
+        result.total_coordination_cycles = 10
+        result.active_coordination_cycles = 7
+
+        assert result.system_availability == pytest.approx(70.0)
+
+    def test_system_availability_zero_cycles(self):
+        """No cycles → None."""
+        result = SimulationResults(
+            config=SimulationConfig(),
+            algorithm=AlgorithmType.ADAPTIVE,
+            connectivity_level=0.75,
+            run_number=0,
+            random_seed=42,
+        )
+        result.total_coordination_cycles = 0
+
+        assert result.system_availability is None
+
+    def test_compute_system_availability_aggregate(self):
+        """PerformanceEvaluator aggregates across runs."""
+        config = SimulationConfig()
+        results = []
+        for i in range(5):
+            r = SimulationResults(
+                config=config,
+                algorithm=AlgorithmType.ADAPTIVE,
+                connectivity_level=0.75,
+                run_number=i,
+                random_seed=i,
+            )
+            r.total_coordination_cycles = 10
+            r.active_coordination_cycles = 7 + i  # 70%-110% range
+            results.append(r)
+
+        evaluator = PerformanceEvaluator(results)
+        stats = evaluator.compute_system_availability(results)
+
+        assert stats.n == 5
+        assert stats.mean > 0
+
+
+# =============================================================================
+# Test Urgency-Stratified Delivery (Mudança 5)
+# =============================================================================
+
+
+class TestUrgencyStratifiedDelivery:
+    """Tests for urgency-stratified delivery rate metric."""
+
+    def test_urgency_stratified_correct_rates(self):
+        """Verify correct per-urgency delivery rates."""
+        from ercs.simulation.engine import SimulationEvent, SimulationEventType
+
+        config = SimulationConfig()
+        result = SimulationResults(
+            config=config,
+            algorithm=AlgorithmType.ADAPTIVE,
+            connectivity_level=0.75,
+            run_number=0,
+            random_seed=42,
+        )
+
+        # 5 H tasks assigned, 3 delivered
+        for i in range(5):
+            result.events.append(SimulationEvent(
+                event_type=SimulationEventType.TASK_ASSIGNED,
+                timestamp=100.0,
+                data={"task_id": f"h_{i}", "urgency": "H", "responder_id": f"r_{i}"},
+            ))
+        result.delivery_times = [
+            ("h_0", 50.0), ("h_1", 60.0), ("h_2", 70.0),
+        ]
+
+        # 10 M tasks assigned, 8 delivered
+        for i in range(10):
+            result.events.append(SimulationEvent(
+                event_type=SimulationEventType.TASK_ASSIGNED,
+                timestamp=100.0,
+                data={"task_id": f"m_{i}", "urgency": "M", "responder_id": f"r_{i}"},
+            ))
+        result.delivery_times.extend([
+            (f"m_{i}", 50.0 + i) for i in range(8)
+        ])
+
+        evaluator = PerformanceEvaluator([result])
+        rates = evaluator.compute_urgency_stratified_delivery([result])
+
+        assert "H" in rates
+        assert "M" in rates
+        assert rates["H"].mean == pytest.approx(3 / 5)
+        assert rates["M"].mean == pytest.approx(8 / 10)
+
+    def test_urgency_stratified_no_urgency_field(self):
+        """Events without urgency field → empty result (no crash)."""
+        from ercs.simulation.engine import SimulationEvent, SimulationEventType
+
+        config = SimulationConfig()
+        result = SimulationResults(
+            config=config,
+            algorithm=AlgorithmType.ADAPTIVE,
+            connectivity_level=0.75,
+            run_number=0,
+            random_seed=42,
+        )
+
+        # TASK_ASSIGNED events without urgency field
+        result.events.append(SimulationEvent(
+            event_type=SimulationEventType.TASK_ASSIGNED,
+            timestamp=100.0,
+            data={"task_id": "t_0", "responder_id": "r_0"},
+        ))
+
+        evaluator = PerformanceEvaluator([result])
+        rates = evaluator.compute_urgency_stratified_delivery([result])
+
+        # No urgency data → empty dict
+        assert len(rates) == 0
 
 
 # =============================================================================

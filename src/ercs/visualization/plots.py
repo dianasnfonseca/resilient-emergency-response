@@ -46,7 +46,7 @@ ALGORITHM_LABELS = {"adaptive": "Adaptive", "baseline": "Baseline"}
 METRICS_CONFIG = {
     "delivery_rate": {"ylabel": "Message Delivery Rate", "title": "Delivery Rate", "fmt": ".3f", "pct": True},
     "assignment_rate": {"ylabel": "Task Assignment Rate", "title": "Assignment Rate", "fmt": ".3f", "pct": True},
-    "avg_response_time": {"ylabel": "Mean Response Time (s)", "title": "Response Time", "fmt": ".1f", "pct": False},
+    "avg_decision_time": {"ylabel": "Mean Decision Time (s)", "title": "Decision Time", "fmt": ".1f", "pct": False},
     "avg_delivery_time": {"ylabel": "Mean Delivery Time (s)", "title": "Delivery Time", "fmt": ".1f", "pct": False},
 }
 
@@ -93,7 +93,7 @@ def build_results_dataframe(results: list[SimulationResults]) -> pd.DataFrame:
             "run": r.run_number,
             "delivery_rate": r.delivery_rate,
             "assignment_rate": r.assignment_rate,
-            "avg_response_time": r.average_response_time,
+            "avg_decision_time": r.average_decision_time,
             "avg_delivery_time": r.average_delivery_time,
             "total_tasks": r.total_tasks,
             "tasks_assigned": r.tasks_assigned,
@@ -371,7 +371,7 @@ def plot_heatmap(
                 matrix[i, j] = values.mean() if len(values) > 0 else 0.0
 
         # For time metrics, lower is better -> non-reversed colormap
-        if metric_key in ("avg_response_time", "avg_delivery_time"):
+        if metric_key in ("avg_decision_time", "avg_delivery_time"):
             cmap = "YlOrRd"
         else:
             cmap = "YlOrRd_r"
