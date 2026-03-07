@@ -7,11 +7,11 @@ A discrete-event simulation framework for evaluating adaptive scheduling algorit
 
 ## Research Questions
 
-**Main Question:** Can adaptive scheduling algorithms integrated with delay-tolerant communication architectures improve emergency resource coordination effectiveness when operating under intermittent connectivity conditions?
+**Main Research Question (MRQ):** Can adaptive scheduling algorithms integrated with delay-tolerant communication architectures improve emergency resource coordination effectiveness when operating under intermittent connectivity conditions?
 
-**Sub-Questions:**
-1. How do distributed communication strategies combined with adaptive scheduling algorithms impact resource allocation effectiveness during varying levels of network disruption?
-2. What are the optimal trade-offs between system complexity, resilience, and performance when adapting centralized emergency coordination approaches for decentralized, low-connectivity environments?
+**Sub-question 1 (SQ1):** How do distributed communication strategies combined with adaptive scheduling algorithms impact resource allocation effectiveness during varying levels of network disruption?
+
+**Sub-question 2 (SQ2):** What are the optimal trade-offs between system complexity, resilience, and performance when adapting centralised emergency coordination approaches for decentralised, low-connectivity environments?
 
 ## Architecture
 
@@ -89,9 +89,19 @@ results = runner.run_all(
 )
 ```
 
+### Quick Start
+
+```bash
+# Interactive dashboard with research context and statistical analysis
+streamlit run app/dashboard.py
+
+# Static thesis-quality notebook with interpretive guidance
+jupyter notebook notebooks/experiment_report.ipynb
+```
+
 ### Streamlit Dashboard
 
-Interactive web dashboard for running experiments and exploring results visually.
+Interactive web dashboard for running experiments and exploring results.
 
 ```bash
 streamlit run app/dashboard.py
@@ -99,16 +109,17 @@ streamlit run app/dashboard.py
 
 Features:
 
+- Research question framing and metric-to-question mapping
 - Sidebar with all experiment parameters and quick test mode (5 runs/config)
 - Live progress bar with ETA during experiment execution
 - Interactive visualizations: grouped bar charts, box plots, heatmaps, degradation lines
 - Network diagnostics: PRoPHET predictability graphs, message journey tracking
-- Statistical analysis tables (t-tests, ANOVA) with significance highlighting
-- Auto-generated key findings summary
+- Statistical analysis tables (t-tests, ANOVA) with interpretive guidance
+- Results interpretation guide tied to research questions
 
 ### Jupyter Notebook
 
-Static notebook suitable for thesis appendix, with publication-quality figures.
+Notebook with publication-quality figures and interpretive markdown for each visualisation.
 
 ```bash
 jupyter notebook notebooks/experiment_report.ipynb
@@ -205,18 +216,26 @@ python scripts/diagnose_encounters.py --connectivity 0.20
 
 ## Algorithms
 
-**Adaptive Coordinator**: Prioritises tasks by urgency (High > Medium > Low). Filters responders by communication reachability (P > 0.3), then selects using a weighted score: `Score = 0.2 x P_abs + 0.2 x R_norm + 0.6 x D_norm - 0.2 x W_penalty`, balancing delivery predictability, encounter recency, and physical proximity while penalising already-assigned responders.
+**Adaptive Coordinator** (urgency-first, network-aware): Prioritises tasks by urgency (High > Medium > Low). Filters responders by PRoPHETv2 delivery predictability (P > 0.3), applies a hard capacity bound (k_max), then selects using a weighted score: `Score = 0.2 x P_abs + 0.2 x R_norm + 0.6 x D_norm - 0.2 x W_penalty`, balancing delivery predictability, encounter recency, and physical proximity while penalising already-assigned responders.
 
-**Baseline Coordinator**: FCFS task ordering, assigns to nearest responder by Euclidean distance regardless of network connectivity.
+**Baseline Coordinator** (FCFS, proximity-only): FCFS task ordering, assigns to nearest responder by Euclidean distance regardless of network connectivity or link quality. No network state.
+
+## Experiment
+
+2 algorithms x 3 connectivity levels x 30 runs = 180 total simulation runs.
+
+Methodology: PRoPHETv2 routing (Grasic et al., 2011), 30 runs per configuration (Law, 2015), P > 0.3 reachability threshold (Ullah & Qayyum, 2022), k_max capacity bound (Bhatti et al., 2021), connectivity levels 75%/40%/20% (Karaman et al., 2024), urgency distribution 20% High / 50% Medium / 30% Low (Li et al., 2025).
 
 ## Evaluation Metrics
 
-- **Delivery Rate**: Messages successfully delivered / messages created
-- **Assignment Rate**: Tasks assigned / total tasks
-- **Response Time**: Time from task creation to assignment
-- **Delivery Time**: Time from task creation to message delivery
+| Metric | Research Question | What It Measures |
+| ------ | ----------------- | ---------------- |
+| avg_delivery_time | MRQ, SQ1 | Whether adaptive coordination improves coordination speed |
+| delivery_rate | SQ2 | The reliability-over-coverage trade-off from the P > 0.3 filter |
+| assignment_rate | Diagnostic | Experimental parity check -- expected identical across algorithms |
+| avg_response_time | Diagnostic | Internal processing overhead -- expected identical across algorithms |
 
-Statistical analysis includes Welch's independent t-tests, one-way ANOVA, Cohen's d effect sizes, and eta-squared (eta^2) with 95% confidence intervals.
+Statistical analysis includes Welch's independent t-tests, one-way ANOVA, Cohen's d effect sizes, and eta-squared with 95% confidence intervals.
 
 ## Testing
 

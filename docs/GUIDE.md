@@ -2,13 +2,35 @@
 
 Emergency Response Coordination Simulator -- MSc Dissertation, University of Liverpool (2026).
 
+## Research Questions
+
+**Main Research Question (MRQ):**
+Can adaptive scheduling algorithms integrated with delay-tolerant communication
+architectures improve emergency resource coordination effectiveness when operating
+under intermittent connectivity conditions?
+
+**Sub-question 1 (SQ1):**
+How do distributed communication strategies combined with adaptive scheduling
+algorithms impact resource allocation effectiveness during varying levels of
+network disruption?
+
+**Sub-question 2 (SQ2):**
+What are the optimal trade-offs between system complexity, resilience, and performance
+when adapting centralised emergency coordination approaches for decentralised,
+low-connectivity environments?
+
+The experiment is structured to address these questions by comparing two coordination
+algorithms (Adaptive and Baseline) across three connectivity levels (75%, 40%, 20%),
+with 30 runs per configuration for statistical rigour. Each metric in the experiment
+is selected to answer a specific research question: avg_delivery_time addresses the
+MRQ and SQ1, delivery_rate addresses SQ2, and assignment_rate and average_decision_time
+serve as diagnostic controls.
+
+---
+
 ## 1. What This Project Does
 
-ERCS is a discrete-event simulation that answers one research question:
-
-> Can adaptive scheduling algorithms integrated with delay-tolerant communication
-> architectures improve emergency resource coordination effectiveness when operating
-> under intermittent connectivity conditions?
+ERCS is a discrete-event simulation designed to answer the research questions above.
 
 It does this by simulating 50 emergency responder nodes in a disaster zone, generating
 tasks via Poisson arrivals, routing assignment messages through a PRoPHETv2
@@ -426,13 +448,30 @@ Transmission time = `message_size_bytes x 8 / transmit_speed_bps`
 
 ### Adaptive (urgency-first, network-aware)
 
-1. **Task ordering**: Sort by urgency (HIGH > MEDIUM > LOW), then by creation time
-   within the same urgency tier.
-2. **Responder filtering**: Only consider responders where
+**Inputs**: pending task queue (with urgency levels), PRoPHETv2 delivery
+predictability matrix P, encounter recency timestamps, responder positions,
+current-cycle workload counts.
+
+**Mechanisms and research question addressed**:
+
+1. **Urgency-first task ordering** (MRQ): Sort by urgency (HIGH > MEDIUM > LOW),
+   then by creation time within the same urgency tier. Ensures high-priority tasks
+   are assigned first when eligible responders are limited -- directly tests whether
+   adaptive scheduling improves coordination effectiveness.
+2. **P > 0.3 reachability filter** (SQ2): Only consider responders where
    `P(coordination_node, responder) > 0.3`. This excludes responders without
    genuine encounter history (transitivity-only P values typically settle at
-   0.05-0.20, while direct encounter values converge to ~0.45-0.50).
-3. **Weighted scoring**: For each candidate responder, compute a combined score:
+   0.05-0.20, while direct encounter values converge to ~0.45-0.50). This is the
+   mechanism that produces the coverage-reliability trade-off SQ2 asks about:
+   fewer assignments, but each assignment is to a reachable responder. Ullah &
+   Qayyum (2022) established P > 0.25 as the minimum viable threshold; 0.30 is
+   used here given the 20% High-urgency profile (Li et al., 2025).
+3. **k_max capacity bound** (SQ2): Hard exclusion of responders with
+   `current_cycle_load >= k_max`, where `k_max = floor(N_tasks / N_eligible) + 1`
+   (Bhatti et al., 2021). Prevents workload concentration and contributes to the
+   complexity-performance trade-off SQ2 examines.
+4. **Weighted scoring** (MRQ, SQ1): For each candidate responder, compute a
+   combined score:
    ```
    Score = alpha x P_abs + gamma_r x R_norm + beta x D_norm - lambda x W_penalty
    ```
@@ -445,17 +484,29 @@ Transmission time = `message_size_bytes x 8 / transmit_speed_bps`
    - `R_norm = 1.0 - min(dt / 1800, 1.0)` (recency: recent encounters score higher)
    - `D_norm = 1.0 - (distance / simulation_diagonal)` (inverted: closer = higher)
    - `W_penalty = 1.0` if responder already assigned this cycle, else 0.0
-4. **Selection**: Pick the responder with the highest combined score.
-5. **Trade-off**: May fail to assign a task if no responder has P > 0.3, but
+   The integration of network state (P_abs, R_norm) with physical proximity (D_norm)
+   is the core mechanism the MRQ tests. The pattern of this score's effectiveness
+   across connectivity levels answers SQ1.
+5. **Selection**: Pick the responder with the highest combined score.
+6. **Trade-off**: May fail to assign a task if no responder has P > 0.3, but
    assignments that are made balance reachability, recency, and proximity while
    distributing workload.
 
 ### Baseline (FCFS, proximity-only)
 
-1. **Task ordering**: Sort by creation time (first-come, first-served).
-   No urgency consideration.
-2. **Responder selection**: Pick the nearest responder by Euclidean distance,
-   regardless of whether a communication path exists.
+**Inputs**: pending task queue (creation timestamps only), responder positions.
+No network state.
+
+**Mechanisms and research question addressed**:
+
+1. **FCFS task ordering** (MRQ control): Sort by creation time (first-come,
+   first-served). No urgency consideration. Serves as the control condition --
+   any improvement in the Adaptive algorithm over this baseline answers the MRQ.
+2. **Nearest-responder selection** (SQ1 control): Pick the nearest responder by
+   Euclidean distance, regardless of whether a communication path exists. By
+   ignoring network state entirely, the Baseline's sensitivity to connectivity
+   degradation establishes the reference against which the Adaptive's robustness
+   is measured (SQ1).
 3. **Trade-off**: Always assigns all tasks (if responders exist), but assignment
    messages may never reach unreachable responders.
 
@@ -465,8 +516,11 @@ Adaptive is **conservative and network-aware**: it prioritises urgent tasks and
 balances proximity with communication reachability and encounter recency using a
 weighted score with workload spreading. Baseline is **optimistic and proximity-only**:
 it always assigns to the nearest responder and hopes the message gets through. The
-research question is whether the network-aware approach yields better real-world
-outcomes (delivery rate, response time) under degraded connectivity.
+MRQ is whether the network-aware approach yields better coordination outcomes under
+degraded connectivity. SQ1 asks whether the advantage grows as connectivity degrades.
+SQ2 asks what the trade-off costs -- specifically, whether the Adaptive algorithm's
+lower coverage (from the P > 0.3 filter) is offset by higher per-assignment reliability
+and speed.
 
 ---
 
@@ -587,22 +641,133 @@ simulation area.
 
 ---
 
+## 8b. Why These Parameters?
+
+Each key experimental parameter controls a specific aspect of the experiment. The
+values are drawn from published literature appropriate to the domain.
+
+### P > 0.3 reachability threshold
+
+Controls which responders the Adaptive algorithm considers eligible for assignment.
+Ullah & Qayyum (2022) established P > 0.25 as the minimum viable threshold for
+PRoPHET-based forwarding -- below this value, delivery latency increases sharply
+even when messages eventually arrive. The threshold is set slightly above the minimum
+at 0.30 given the 20% High-urgency task profile (Li et al., 2025), where the cost of
+failed delivery to a high-urgency task is disproportionate.
+
+### k_max capacity bound
+
+Controls the maximum number of tasks a single responder can be assigned per
+coordination cycle: `k_max = floor(N_tasks / N_eligible) + 1`. Bhatti et al. (2021)
+demonstrated that hard capacity constraints produce more equitable utilisation than
+soft penalties, preventing a single well-connected responder from receiving all
+assignments.
+
+### PRoPHETv2 parameters
+
+Control how delivery predictability evolves over time (Grasic et al., 2011):
+
+- **P_enc_max = 0.5**: Maximum encounter probability. Caps how much a single
+  encounter can increase predictability, preventing rapid saturation.
+- **I_typ = 1800s** (30 min): Typical inter-encounter interval. Encounters more
+  frequent than this contribute proportionally less to predictability, preventing
+  rapid re-encounters from inflating P values.
+- **beta = 0.9**: Transitivity weight. The MAX-based transitivity formula (instead
+  of additive) combined with high beta prevents P-value saturation that would cause
+  epidemic-like forwarding and eliminate connectivity as an experimental variable.
+- **gamma = 0.999885791**: Aging constant. Very slow decay -- predictability halves
+  after approximately 50 hours. Ensures that established encounter patterns persist
+  long enough for the coordination algorithm to exploit them within the 100-minute
+  simulation window.
+
+### 30 runs per configuration
+
+Satisfies the Central Limit Theorem requirement for statistical inference with
+unknown population distributions (Law, 2015). With 30 observations per cell, Welch's
+t-test and one-way ANOVA produce reliable p-values and effect sizes.
+
+### Connectivity levels: 75%, 40%, 20%
+
+Model three infrastructure damage scenarios from Karaman et al. (2024): functional
+(75% of links operational), degraded (40%, representing 24-48 hours post-earthquake),
+and severely degraded (20%, representing the early disaster phase where only critical
+communication paths survive). These levels span the range where the difference between
+network-aware and network-unaware coordination is expected to be most visible.
+
+### Urgency distribution: 20% High, 50% Medium, 30% Low
+
+Models realistic emergency task profiles from Li et al. (2025). The 20% High-urgency
+proportion is the primary reason for setting the P threshold above the 0.25 minimum --
+the cost of misrouting a high-urgency task to an unreachable responder justifies a
+more conservative filter.
+
+---
+
 ## 9. What Gets Measured
 
-Each run produces a `SimulationResults` with these metrics:
+### Metric-to-Research-Question Mapping
 
-| Metric | Formula | What it means |
+Each metric in the experiment answers a specific research question:
+
+| Metric | Research question | What it measures |
 |---|---|---|
-| `delivery_rate` | messages_delivered / messages_created | Did the message reach the responder? |
-| `assignment_rate` | tasks_assigned / total_tasks | Did the algorithm assign the task? |
-| `avg_response_time` | mean(assignment_time - creation_time) | How long did the task wait for assignment? |
-| `avg_delivery_time` | mean(delivery_time - creation_time) | How long until the message physically arrived? |
+| `avg_delivery_time` | MRQ, SQ1 | Whether adaptive coordination improves coordination speed -- the direct operational outcome |
+| `delivery_rate` | SQ2 | The reliability-over-coverage trade-off: the Adaptive algorithm withholds assignments below the P threshold rather than attempt uncertain deliveries |
+| `assignment_rate` | Diagnostic | Whether both algorithms are processing the same task load -- confirms experimental parity, not an algorithm differentiator |
+| `avg_response_time` | Diagnostic | Internal processing overhead -- expected identical across algorithms |
+
+### avg_delivery_time (MRQ, SQ1) -- Primary Metric
+
+Mean seconds from task creation to message delivery at the assigned responder.
+Lower values mean responders receive assignments faster. A lower value for Adaptive
+than Baseline indicates the reachability filter and urgency-first ordering are
+reducing coordination latency. A growing gap as connectivity decreases indicates
+the network-aware mechanism provides increasing robustness under degradation (MRQ
+and SQ1).
+
+### delivery_rate (SQ2) -- Trade-off Metric
+
+Proportion of coordination messages that reach the assigned responder before TTL
+expiry (messages_delivered / messages_created). This metric directly addresses SQ2.
+The Adaptive algorithm's P > 0.3 filter produces fewer assignment attempts than the
+Baseline in low-connectivity conditions, resulting in a structurally lower
+delivery_rate. This is the trade-off SQ2 asks about: reduced coverage in exchange
+for higher per-assignment reliability and speed. Ullah & Qayyum (2022) establish
+P > 0.25 as the minimum viable threshold because optimistic assignments to low-P
+nodes produce high delivery latency even when messages eventually arrive. A lower
+delivery_rate for Adaptive is not a failure -- it is evidence of the trade-off.
+
+### assignment_rate (Diagnostic)
+
+Proportion of tasks that received an assignment (tasks_assigned / total_tasks).
+Determined by task arrival rate and simulation parameters, not by algorithm
+decisions. Expected identical across both algorithms. If values differ, this
+indicates a simulation configuration issue, not an algorithm difference.
+
+### avg_response_time (Diagnostic)
+
+Mean seconds from task creation to assignment decision (assignment_time -
+creation_time). Determined by the coordination cycle interval (30 min), not by
+algorithm logic. Expected identical across algorithms.
+
+### Raw Metrics
+
+Each run produces a `SimulationResults` with these computed values:
+
+| Metric | Formula |
+|---|---|
+| `delivery_rate` | messages_delivered / messages_created |
+| `assignment_rate` | tasks_assigned / total_tasks |
+| `avg_response_time` | mean(assignment_time - creation_time) |
+| `avg_delivery_time` | mean(delivery_time - creation_time) |
 
 Additional raw counts are tracked: `total_tasks`, `tasks_assigned`,
 `tasks_by_urgency`, `messages_created`, `messages_delivered`, `messages_expired`,
 plus per-task `response_times` and `delivery_times` lists.
 
-The `PerformanceEvaluator` (in `metrics.py`) then computes:
+### Statistical Tests
+
+The `PerformanceEvaluator` (in `metrics.py`) computes:
 
 - **Descriptive stats**: n, mean, std, median, min, max, 95% CI per group
   (CI uses t-distribution: `mean +- t_crit(alpha/2, df=n-1) x SE`)
@@ -616,6 +781,18 @@ The `PerformanceEvaluator` (in `metrics.py`) then computes:
 - **Improvement percentage**: `(adaptive_mean - baseline_mean) / baseline_mean x 100`
 
 All tests use alpha = 0.05 significance level.
+
+The t-tests on avg_delivery_time address the MRQ: is there a significant difference
+in coordination speed between algorithms? The ANOVA on avg_delivery_time addresses
+SQ1: does connectivity level affect each algorithm differently? A higher eta-squared
+for the Baseline means it is more sensitive to network degradation -- the Adaptive
+algorithm is more robust.
+
+The t-tests on delivery_rate address SQ2: is the coverage trade-off statistically
+significant, and does it vary with connectivity level?
+
+assignment_rate and avg_response_time are expected to show p ~ 1.000 and d ~ 0.000.
+They are included as sanity checks confirming experimental parity.
 
 ---
 

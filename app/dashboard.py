@@ -57,6 +57,41 @@ st.set_page_config(
 apply_thesis_style()
 
 # ---------------------------------------------------------------------------
+# Research context (displayed before any controls)
+# ---------------------------------------------------------------------------
+
+st.markdown("""
+**What is this?**
+An experimental simulation comparing two coordination algorithms for emergency
+responders operating under degraded network infrastructure.
+
+**Research questions this experiment addresses:**
+
+- **MRQ:** Can adaptive scheduling algorithms integrated with delay-tolerant
+  communication architectures improve emergency resource coordination effectiveness
+  when operating under intermittent connectivity conditions?
+- **SQ1:** How do distributed communication strategies combined with adaptive
+  scheduling algorithms impact resource allocation effectiveness during varying
+  levels of network disruption?
+- **SQ2:** What are the optimal trade-offs between system complexity, resilience,
+  and performance when adapting centralised emergency coordination approaches for
+  decentralised, low-connectivity environments?
+
+**The setup:** 50 nodes, 3000x1500m area, three connectivity scenarios (75%, 40%,
+20%). Each scenario run 30 times (Law, 2015). PRoPHETv2 routing (Grasic et al., 2011).
+
+**The two algorithms:**
+
+- **Adaptive:** Urgency-first task ordering, network-aware responder selection
+  (P > 0.3 reachability filter, k_max capacity bound, PRoPHETv2 delivery
+  predictability scoring).
+- **Baseline:** FCFS task ordering, nearest responder by Euclidean distance,
+  no network state.
+""")
+
+st.divider()
+
+# ---------------------------------------------------------------------------
 # Session state
 # ---------------------------------------------------------------------------
 
@@ -121,6 +156,25 @@ with st.sidebar:
         - **Interval:** {config.coordination.update_interval_seconds // 60} min
         - **Adaptive:** {config.coordination.adaptive_task_order.replace("_", " ").title()}
         - **Baseline:** {config.coordination.baseline_task_order.upper()}
+        - **P threshold:** {config.coordination.path_threshold}
+        """)
+
+    with st.expander("Why P > 0.3?"):
+        st.markdown("""
+        P > 0.3 is the network-awareness mechanism. A responder whose delivery
+        predictability is below this threshold is excluded from assignment
+        eligibility by the Adaptive algorithm.
+
+        Ullah & Qayyum (2022) established P > 0.25 as the minimum viable
+        threshold for PRoPHET-based forwarding -- below this value, delivery
+        latency increases sharply even when messages eventually arrive. The
+        threshold is set at 0.30 given the 20% High-urgency task profile
+        (Li et al., 2025), where the cost of failed delivery to a high-urgency
+        task is disproportionate.
+
+        Setting the threshold too low makes the filter ineffective (the Adaptive
+        algorithm behaves like the Baseline). Setting it too high leaves too few
+        eligible responders, reducing assignment coverage.
         """)
 
 
@@ -130,7 +184,7 @@ with st.sidebar:
 
 tab_setup, tab_run, tab_viz, tab_diag, tab_stats, tab_findings = st.tabs(
     ["Parameters", "Run Experiment", "Visualizations", "Network Diagnostics",
-     "Statistical Analysis", "Key Findings"]
+     "Statistical Analysis", "How to Read Results"]
 )
 
 # ---- Tab 1: Parameters ----
@@ -244,11 +298,42 @@ with tab_viz:
         for metric_key in METRICS_CONFIG:
             summaries[metric_key] = compute_summary_stats(df, metric_key)
 
-        # Grouped bar charts
+        # What do these metrics mean?
+        with st.expander("What do these metrics mean?", expanded=False):
+            st.markdown("""
+            - **avg_delivery_time** (MRQ, SQ1): Mean seconds from task creation to
+              message delivery at the assigned responder. Lower = faster coordination.
+              The gap between algorithms answers the MRQ. The pattern across
+              connectivity levels answers SQ1.
+
+            - **delivery_rate** (SQ2): Proportion of coordination messages that reach
+              the assigned responder. The Adaptive algorithm's P > 0.3 filter withholds
+              assignments below threshold. A lower delivery_rate for Adaptive reflects
+              the trade-off SQ2 asks about: reduced coverage in exchange for higher
+              per-assignment reliability. This is not a failure mode.
+
+            - **assignment_rate** (diagnostic): Set by task arrival and simulation
+              parameters, not by algorithm decisions. Expected identical across
+              algorithms.
+
+            - **avg_response_time** (diagnostic): Internal processing latency
+              determined by the coordination cycle interval. Expected identical across
+              algorithms.
+            """)
+
+        # Primary metric: avg_delivery_time
+        st.subheader("Primary Metric: Coordination Response Time (avg_delivery_time) -- MRQ, SQ1")
+        if "avg_delivery_time" in summaries:
+            fig = plot_grouped_bars(summaries["avg_delivery_time"], "avg_delivery_time")
+            st.pyplot(fig)
+
+        st.divider()
+
+        # Remaining grouped bar charts
         st.subheader("Algorithm Comparison (Grouped Bar Charts)")
-        n_metrics = len(METRICS_CONFIG)
-        bar_cols = st.columns(min(n_metrics, 4))
-        for i, metric_key in enumerate(METRICS_CONFIG):
+        remaining_metrics = [k for k in METRICS_CONFIG if k != "avg_delivery_time"]
+        bar_cols = st.columns(min(len(remaining_metrics), 3))
+        for i, metric_key in enumerate(remaining_metrics):
             with bar_cols[i % len(bar_cols)]:
                 fig = plot_grouped_bars(summaries[metric_key], metric_key)
                 st.pyplot(fig)
@@ -458,6 +543,25 @@ with tab_stats:
     else:
         report = st.session_state.report
 
+        with st.expander("How to read these tables", expanded=False):
+            st.markdown("""
+            **p-value:** Below 0.05 indicates the observed difference is unlikely
+            to be due to chance.
+
+            **Cohen's d:** Standardised effect size. Above 0.8 -- distributions are
+            substantially separated, algorithms are producing reliably different
+            outcomes. Below 0.2 -- negligible separation. At low connectivity,
+            increasing variance in both algorithms tends to reduce Cohen's d even
+            when the mean difference is meaningful.
+
+            **eta-squared (ANOVA):** Proportion of variance in the metric explained
+            by connectivity level. This answers SQ1 directly: if the Baseline has
+            higher eta-squared than the Adaptive for avg_delivery_time, connectivity
+            degradation affects the Baseline more sharply -- the Adaptive algorithm
+            is more robust. If eta-squared values are similar, the network-aware
+            mechanism is not providing the robustness benefit hypothesised.
+            """)
+
         st.subheader("Welch's t-test: Adaptive vs Baseline")
         st.caption("Independent samples t-test (unequal variances). Significance level: \u03b1 = 0.05")
         ttest_df = build_ttest_table(report)
@@ -505,70 +609,99 @@ with tab_stats:
             )
 
 
-# ---- Tab 6: Key Findings ----
+# ---- Tab 6: How to Read the Results ----
 with tab_findings:
-    st.header("Key Findings")
+    st.header("How to Read the Results")
 
     if st.session_state.report is None:
-        st.warning("Run the experiment first (tab 2) to generate findings.")
+        st.warning("Run the experiment first (tab 2) to generate results.")
     else:
         report = st.session_state.report
 
-        # Delivery rate overall
-        overall_dr = next(
-            (c for c in report.comparisons
-             if c.metric == MetricType.DELIVERY_RATE and c.connectivity_level is None),
-            None,
+        st.subheader("For the MRQ")
+        st.markdown(
+            "Is avg_delivery_time consistently lower for the Adaptive algorithm "
+            "across all connectivity levels? If yes, adaptive coordination improves "
+            "coordination effectiveness under intermittent connectivity."
         )
-        if overall_dr:
-            st.subheader("1. Overall Delivery Rate")
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Adaptive", f"{overall_dr.adaptive_stats.mean:.4f}")
-            col2.metric("Baseline", f"{overall_dr.baseline_stats.mean:.4f}")
-            col3.metric("Improvement", f"{overall_dr.improvement:+.2f}%")
-            if overall_dr.ttest.significant:
-                st.success(f"Statistically significant (p = {overall_dr.ttest.p_value:.4f}, d = {overall_dr.ttest.cohens_d:.3f})")
-            else:
-                st.info(f"Not statistically significant (p = {overall_dr.ttest.p_value:.4f})")
 
-        # Largest advantage
-        per_conn_dr = [
-            c for c in report.comparisons
-            if c.metric == MetricType.DELIVERY_RATE and c.connectivity_level is not None
-        ]
-        if per_conn_dr:
-            best = max(per_conn_dr, key=lambda c: c.improvement)
-            st.subheader("2. Largest Adaptive Advantage")
-            st.metric(
-                f"At {best.connectivity_level * 100:.0f}% connectivity",
-                f"{best.improvement:+.2f}% improvement",
-            )
-
-        # Delivery time advantage
+        # Show delivery time comparison
         dt_comps = [c for c in report.comparisons
                     if c.metric == MetricType.DELIVERY_TIME
                     and c.connectivity_level is not None]
         if dt_comps:
-            best_dt = min(dt_comps, key=lambda c: c.improvement)  # most negative = faster
-            conn_label = f"{int(best_dt.connectivity_level * 100)}%"
-            st.subheader("3. Fastest Delivery Advantage")
-            st.metric(
-                f"At {conn_label} connectivity",
-                f"{best_dt.improvement:+.1f}%",
-                delta_color="inverse",  # negative is good here
-            )
+            dt_cols = st.columns(len(dt_comps))
+            for i, comp in enumerate(sorted(dt_comps, key=lambda c: -c.connectivity_level)):
+                with dt_cols[i]:
+                    conn_label = f"{int(comp.connectivity_level * 100)}%"
+                    st.metric(
+                        f"avg_delivery_time @ {conn_label}",
+                        f"{comp.improvement:+.1f}%",
+                        delta_color="inverse",
+                    )
+                    sig_text = f"p={comp.ttest.p_value:.4f}, d={comp.ttest.cohens_d:+.3f}"
+                    if comp.ttest.significant:
+                        st.caption(f"Significant: {sig_text}")
+                    else:
+                        st.caption(f"Not significant: {sig_text}")
 
-        # Connectivity effect
-        st.subheader("4. Connectivity Effect (ANOVA)")
-        for key, anova in report.anova_results.items():
-            parts = key.rsplit("_", 1)
-            metric_name = parts[0].replace("_", " ").title()
-            algorithm = parts[1].capitalize() if len(parts) > 1 else "All"
-            effect = anova._interpret_effect_size()
-            sig_text = "significant" if anova.significant else "not significant"
-            st.text(
-                f"  {metric_name} ({algorithm}): "
-                f"F({anova.df_between},{anova.df_within}) = {anova.f_statistic:.3f}, "
-                f"p = {anova.p_value:.4f} ({sig_text}), "
-                f"\u03b7\u00b2 = {anova.eta_squared:.3f} ({effect})"
-            )
+        st.divider()
+
+        st.subheader("For SQ1")
+        st.markdown(
+            "Does the gap in avg_delivery_time between algorithms grow as connectivity "
+            "decreases? Does the Baseline's ANOVA eta-squared exceed the Adaptive's? "
+            "If yes, distributed network-aware communication provides increasing "
+            "robustness under degradation relative to proximity-only coordination."
+        )
+
+        # Show ANOVA eta-squared for delivery_time
+        dt_anova_keys = [k for k in report.anova_results if k.startswith("delivery_time")]
+        if dt_anova_keys:
+            anova_cols = st.columns(len(dt_anova_keys))
+            for i, key in enumerate(sorted(dt_anova_keys)):
+                anova = report.anova_results[key]
+                algorithm = key.rsplit("_", 1)[1].capitalize() if "_" in key else "All"
+                with anova_cols[i]:
+                    st.metric(f"eta-squared ({algorithm})", f"{anova.eta_squared:.3f}")
+
+        st.divider()
+
+        st.subheader("For SQ2")
+        st.markdown(
+            "Is delivery_rate lower for the Adaptive algorithm? If yes, this is "
+            "evidence of the trade-off SQ2 asks about -- reduced coverage in exchange "
+            "for higher reliability per assignment. The size of the gap and whether it "
+            "grows with connectivity degradation indicates how much the trade-off costs "
+            "operationally."
+        )
+
+        # Show delivery rate comparison
+        dr_comps = [c for c in report.comparisons
+                    if c.metric == MetricType.DELIVERY_RATE
+                    and c.connectivity_level is not None]
+        if dr_comps:
+            dr_cols = st.columns(len(dr_comps))
+            for i, comp in enumerate(sorted(dr_comps, key=lambda c: -c.connectivity_level)):
+                with dr_cols[i]:
+                    conn_label = f"{int(comp.connectivity_level * 100)}%"
+                    st.metric(
+                        f"delivery_rate @ {conn_label}",
+                        f"{comp.improvement:+.2f}%",
+                    )
+
+        st.divider()
+
+        st.subheader("What would support all three research questions")
+        st.markdown(
+            "Lower avg_delivery_time for Adaptive at all levels; higher eta-squared "
+            "for Baseline on avg_delivery_time; a delivery_rate gap consistent with "
+            "the P > 0.3 filter being more active at lower connectivity."
+        )
+
+        st.subheader("What would challenge the research questions")
+        st.markdown(
+            "No significant delivery_time difference at any connectivity level; "
+            "similar eta-squared for both algorithms; delivery_rate patterns "
+            "inconsistent with the reachability filter mechanism."
+        )
