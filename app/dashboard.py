@@ -156,7 +156,7 @@ with st.sidebar:
         - **Interval:** {config.coordination.update_interval_seconds // 60} min
         - **Adaptive:** {config.coordination.adaptive_task_order.replace("_", " ").title()}
         - **Baseline:** {config.coordination.baseline_task_order.upper()}
-        - **P threshold:** {config.coordination.path_threshold}
+        - **P threshold:** {config.coordination.available_path_threshold}
         """)
 
     with st.expander("Why P > 0.3?"):
@@ -268,7 +268,7 @@ with tab_run:
 
         evaluator = PerformanceEvaluator(results)
         st.session_state.report = evaluator.generate_report(
-            metrics=[MetricType.DELIVERY_RATE, MetricType.ASSIGNMENT_RATE, MetricType.RESPONSE_TIME, MetricType.DELIVERY_TIME]
+            metrics=[MetricType.DELIVERY_RATE, MetricType.ASSIGNMENT_RATE, MetricType.DECISION_TIME, MetricType.DELIVERY_TIME]
         )
 
         st.success(f"Experiment completed: {len(results)} simulation runs")
@@ -277,7 +277,7 @@ with tab_run:
         st.subheader("Summary Statistics")
         summary_df = (
             st.session_state.df
-            .groupby(["algorithm", "connectivity"])[["delivery_rate", "assignment_rate", "avg_response_time", "avg_delivery_time"]]
+            .groupby(["algorithm", "connectivity"])[["delivery_rate", "assignment_rate", "avg_decision_time", "avg_delivery_time"]]
             .agg(["mean", "std", "min", "max"])
             .round(4)
         )
@@ -316,7 +316,7 @@ with tab_viz:
               parameters, not by algorithm decisions. Expected identical across
               algorithms.
 
-            - **avg_response_time** (diagnostic): Internal processing latency
+            - **avg_decision_time** (diagnostic): Internal processing latency
               determined by the coordination cycle interval. Expected identical across
               algorithms.
             """)
@@ -367,7 +367,7 @@ with tab_viz:
             figures = {
                 "fig_delivery_rate_bars": plot_grouped_bars(summaries["delivery_rate"], "delivery_rate"),
                 "fig_assignment_rate_bars": plot_grouped_bars(summaries["assignment_rate"], "assignment_rate"),
-                "fig_response_time_bars": plot_grouped_bars(summaries["avg_response_time"], "avg_response_time"),
+                "fig_response_time_bars": plot_grouped_bars(summaries["avg_decision_time"], "avg_decision_time"),
                 "fig_delivery_time_bars": plot_grouped_bars(summaries["avg_delivery_time"], "avg_delivery_time"),
                 "fig_box_distributions": plot_box_distributions(df),
                 "fig_heatmap": plot_heatmap(df),

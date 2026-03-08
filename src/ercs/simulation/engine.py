@@ -659,20 +659,6 @@ class SimulationEngine:
         if len(assignments) > 0:
             results.active_coordination_cycles += 1
 
-        # Log k_max for capacity-bound diagnostics (adaptive only)
-        k_max = getattr(self._coordinator, "_last_cycle_k_max", None)
-        if k_max is not None:
-            max_load = getattr(self._coordinator, "_last_cycle_max_load", 0)
-            self._log_event(
-                SimulationEventType.COORDINATION_CYCLE,
-                event.timestamp,
-                {
-                    "k_max": k_max,
-                    "max_observed_load": max_load,
-                    "assignments": len(assignments),
-                },
-            )
-
         # Process assignments — distribute messages across coord nodes (round-robin)
         for i, assignment in enumerate(assignments):
             results.tasks_assigned += 1

@@ -1,17 +1,17 @@
 """
-Regression tests for adaptive coordinator fixes + capacity-bounded assignment.
+Regression tests for adaptive coordinator fixes + workload balancing.
 
 Groups:
     A — TestConstants: verify module-level constants
     B — TestBug1AbsoluteNormalisation: prevent assignment concentration
     C — TestBug2ThresholdFiltering: P > 0.3 excludes marginal nodes
-    D — TestCapacityBound: hard k_max exclusion (replaces W_intra soft penalty)
+    D — TestWorkloadBalancing: soft W_inter penalty + distance normalisation
 
 Sources:
     Shah & Ahmed (2025) — absolute DP values (SN Computer Science)
     Ullah & Qayyum (2022) — SAAD forwarder threshold
     Boondirek et al. (2014) — DiPRoPHET distance-dominant weighting
-    Bhatti et al. (2021) — bounded task assignment (b-matching)
+    Deng et al. (2016) — soft workload balancing (IEEE TMC)
 """
 
 import pytest
@@ -367,132 +367,25 @@ class TestBug2ThresholdFiltering:
 
 
 # ============================================================================
-# Group D — TestCapacityBound (replaces TestBug4WorkloadPenalty)
+# Group D — TestWorkloadBalancing (soft W_inter penalty + normalisation)
 # ============================================================================
 
 
-class TestCapacityBound:
+class TestWorkloadBalancing:
     """
-    Capacity-bounded assignment: Bhatti et al. (2021).
+    Soft workload balancing via W_inter penalty.
 
-    Replaces the W_intra soft penalty with a hard capacity exclusion.
-    k_max = floor(T / R) + 1 caps the maximum tasks any single responder
-    can receive per coordination cycle (b-matching upper bound).
+    W_inter = 1 for responders assigned in a previous cycle, reducing their
+    score by λ = 0.2.  This discourages re-assignment proportionally without
+    hard exclusion, following Deng et al. (2016, IEEE TMC) and Boondirek
+    et al. (2014) who use score-based selection without capacity constraints.
     """
 
-    def test_capacity_bound_excludes_saturated_responder(self):
-        """
-        10 tasks, 5 responders → k_max = floor(10/5) + 1 = 3.
-
-        After responder_1 receives k_max tasks, it must not be selected
-        for task k_max+1, even if it has the highest P-value.
-        """
-        # 5 responders: r_1 closest to all tasks and highest P
-        positions = {
-            "r_1": (105.0, 105.0),    # Very close to tasks
-            "r_2": (300.0, 300.0),
-            "r_3": (500.0, 500.0),
-            "r_4": (700.0, 700.0),
-            "r_5": (900.0, 500.0),
-        }
-        locator = MockResponderLocator(positions)
-
-        net = MockNetworkState({
-            ("coord_0", "r_1"): 0.50,   # Highest P
-            ("coord_0", "r_2"): 0.40,
-            ("coord_0", "r_3"): 0.40,
-            ("coord_0", "r_4"): 0.40,
-            ("coord_0", "r_5"): 0.40,
-        })
-
-        # 10 tasks all near r_1
-        tasks = [
-            _make_task(f"t_{i}", float(i), x=100.0, y=100.0)
-            for i in range(10)
-        ]
-
-        coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            tasks=tasks,
-            responder_locator=locator,
-            network_state=net,
-            coordination_node="coord_0",
-            current_time=100.0,
-        )
-
-        assert len(assignments) == 10
-
-        # k_max = floor(10/5) + 1 = 3
-        from collections import Counter
-        counts = Counter(a.responder_id for a in assignments)
-
-        assert counts["r_1"] <= 3, (
-            f"r_1 received {counts['r_1']} tasks, expected <= k_max=3"
-        )
-
-        # Other responders must have received the overflow
-        assert len(counts) >= 2, (
-            f"Expected >= 2 unique responders, got {len(counts)}"
-        )
-
-    def test_capacity_bound_distributes_load(self):
-        """
-        20 tasks, 10 responders, identical P and distances.
-
-        Gini coefficient of assignments must be < 0.4 (well-distributed).
-        """
-        # 10 responders at equal distance from task location
-        positions = {}
-        for i in range(10):
-            angle = 2 * 3.14159 * i / 10
-            x = 500.0 + 200.0 * (1 if i % 2 == 0 else -1)  # symmetric
-            y = 500.0 + 200.0 * ((i % 3) - 1)
-            positions[f"r_{i}"] = (x, y)
-        locator = MockResponderLocator(positions)
-
-        # All identical P
-        net = MockNetworkState({
-            ("coord_0", f"r_{i}"): 0.45 for i in range(10)
-        })
-
-        # 20 tasks at centre
-        tasks = [
-            _make_task(f"t_{i}", float(i), x=500.0, y=500.0)
-            for i in range(20)
-        ]
-
-        coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            tasks=tasks,
-            responder_locator=locator,
-            network_state=net,
-            coordination_node="coord_0",
-            current_time=100.0,
-        )
-
-        assert len(assignments) == 20
-
-        # Compute Gini coefficient
-        from collections import Counter
-        counts = Counter(a.responder_id for a in assignments)
-        values = sorted(counts.values())
-        n = len(values)
-        if n == 0 or sum(values) == 0:
-            gini = 0.0
-        else:
-            numerator = sum((2 * (i + 1) - n - 1) * v for i, v in enumerate(values))
-            gini = numerator / (n * sum(values))
-
-        assert gini < 0.4, (
-            f"Gini coefficient {gini:.3f} >= 0.4, load poorly distributed: "
-            f"{dict(counts)}"
-        )
-
-    def test_inter_cycle_penalty_preserved(self):
+    def test_inter_cycle_penalty_flips_selection(self):
         """
         W_inter = 1 for a responder used in the previous cycle, reducing
-        its score by λ = 0.2.  This operates independently of the
-        intra-cycle capacity exclusion.
+        its score by λ = 0.2.  Two near-identical responders should
+        alternate across cycles.
         """
         positions = {
             "r_a": (150.0, 550.0),
@@ -520,30 +413,42 @@ class TestCapacityBound:
         assert second != first, (
             f"Inter-cycle penalty should flip selection, got {second} both times"
         )
-
-        # Verify independence: in cycle 2, k_max = floor(1/2)+1 = 1
-        # so capacity doesn't block the second responder
         assert len(a2) == 1
 
-    def test_k_max_computed_correctly(self):
+    def test_best_candidate_not_blocked_within_cycle(self):
         """
-        Verify k_max = floor(T/R) + 1 for three cases:
-          10 tasks /  7 responders → k_max = 2
-          64 tasks / 47 responders → k_max = 2
-         100 tasks / 48 responders → k_max = 3
+        Without hard capacity exclusion, the best candidate (closest + highest P)
+        can receive multiple tasks in the same cycle when it is clearly superior.
         """
-        cases = [
-            (10, 7, 2),
-            (64, 47, 2),
-            (100, 48, 3),
+        positions = {
+            "r_best": (105.0, 105.0),    # Very close to all tasks, highest P
+            "r_far": (2000.0, 1000.0),   # Far away
+        }
+        locator = MockResponderLocator(positions)
+
+        net = MockNetworkState({
+            ("coord_0", "r_best"): 0.50,
+            ("coord_0", "r_far"): 0.35,
+        })
+
+        # 3 tasks all near r_best
+        tasks = [
+            _make_task(f"t_{i}", float(i), x=100.0, y=100.0)
+            for i in range(3)
         ]
 
-        for num_tasks, num_responders, expected_k_max in cases:
-            k_max = (num_tasks // max(num_responders, 1)) + 1
-            assert k_max == expected_k_max, (
-                f"{num_tasks} tasks / {num_responders} responders: "
-                f"expected k_max={expected_k_max}, got {k_max}"
-            )
+        coord = AdaptiveCoordinator()
+        assignments = coord.assign_tasks(
+            tasks=tasks,
+            responder_locator=locator,
+            network_state=net,
+            coordination_node="coord_0",
+            current_time=100.0,
+        )
+
+        assert len(assignments) == 3
+        # r_best should get all tasks — it is both closest and has highest P
+        assert all(a.responder_id == "r_best" for a in assignments)
 
     def test_fixed_diagonal_normalisation(self):
         """
