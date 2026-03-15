@@ -2,21 +2,7 @@
 ERCS Configuration Parameters.
 
 This module defines all simulation parameters organized by implementation phase.
-Each parameter includes its value, literature source, and description.
-
-Sources:
-    - Ullah & Qayyum (2022): Post-disaster DTN routing simulation
-    - Kumar et al. (2023): PRoPHET protocol optimization
-    - Karaman et al. (2026): Turkey earthquake infrastructure analysis
-    - Rosas et al. (2023): DTN message prioritisation
-    - Kaji et al. (2025): Distributed emergency logistics
-    - Cabral et al. (2018): EMS response time standards
-    - Li et al. (2025): Emergency facility location
-    - Oksuz & Satoglu (2024): Casualty allocation planning
-    - Keykhaei et al. (2024): Multi-agent evacuation
-    - Law (2015): Simulation methodology
-    - Pu et al. (2025): Disaster response modelling
-    - Castillo et al. (2024): DTN systematic review
+Each parameter includes its value and description.
 """
 
 from enum import Enum
@@ -35,7 +21,7 @@ class UrgencyLevel(str, Enum):
     Task urgency classification levels.
 
     Based on emergency medical triage conventions and DTN prioritisation
-    research (Rosas et al., 2023).
+    research.
     """
 
     HIGH = "H"
@@ -59,7 +45,6 @@ class BufferDropPolicy(str, Enum):
     """
     Buffer management policy when capacity is exceeded.
 
-    Source: Ullah & Qayyum (2022) - drop oldest messages standard practice
     """
 
     DROP_OLDEST = "drop_oldest"
@@ -70,9 +55,6 @@ class MobilityModel(str, Enum):
     """
     Node mobility models for DTN simulation.
 
-    Sources:
-        - Ullah & Qayyum (2022): Random Waypoint commonly used in DTN research
-        - Aschenbruck et al. (2009): Disaster Area mobility model
     """
 
     RANDOM_WAYPOINT = "random_waypoint"
@@ -86,10 +68,6 @@ class ResponderRole(str, Enum):
     Different roles produce heterogeneous encounter patterns that allow
     PRoPHET to build differentiated delivery predictability values.
 
-    Sources:
-        - Aschenbruck et al. (2009): Disaster Area mobility model
-        - Uddin et al. (2011): Post-Disaster Mobility Model
-        - Stute et al. (2017): Natural Disaster Mobility Model
     """
 
     RESCUE = "rescue"        # ~60% — localised in incident zone
@@ -107,7 +85,7 @@ class ZoneConfig(BaseModel):
     Geographic zone configuration.
 
     Defines the dimensions and position of a zone within the simulation area.
-    Zone dimensions are adapted from Ullah & Qayyum (2022).
+    Zone dimensions are defined in ``configs/default.yaml``.
     """
 
     width_m: float = Field(..., gt=0, description="Zone width in metres")
@@ -125,10 +103,6 @@ class NetworkParameters(BaseModel):
     """
     Phase 1: Network Topology Generation Parameters.
 
-    Sources:
-        - Ullah & Qayyum (2022): Node count, area, radio range, buffer, mobility
-        - Kumar et al. (2023): Message size
-        - Karaman et al. (2026): Connectivity scenarios from Turkey earthquake data
     """
 
     # Network Scale
@@ -136,12 +110,12 @@ class NetworkParameters(BaseModel):
         default=50,
         ge=30,
         le=100,
-        description="Primary node count. Source: Ullah & Qayyum (2022)",
+        description="Primary node count.",
     )
 
     sensitivity_node_counts: list[int] = Field(
         default=[30, 50, 70],
-        description="Node counts for sensitivity analysis. Source: Design decision",
+        description="Node counts for sensitivity analysis.",
     )
 
     # Geographic Configuration
@@ -149,21 +123,21 @@ class NetworkParameters(BaseModel):
         default_factory=lambda: ZoneConfig(
             width_m=3000.0, height_m=1500.0, origin_x=0.0, origin_y=0.0
         ),
-        description="Total simulation area. Source: Ullah & Qayyum (2022) - 3000×1500 m²",
+        description="Total simulation area (3000x1500 m).",
     )
 
     incident_zone: ZoneConfig = Field(
         default_factory=lambda: ZoneConfig(
             width_m=700.0, height_m=600.0, origin_x=0.0, origin_y=450.0
         ),
-        description="Incident zone. Source: Adapted from Ullah & Qayyum (2022)",
+        description="Incident zone.",
     )
 
     coordination_zone: ZoneConfig = Field(
         default_factory=lambda: ZoneConfig(
             width_m=50.0, height_m=50.0, origin_x=800.0, origin_y=300.0
         ),
-        description="Coordination zone. Source: Adapted from Ullah & Qayyum (2022)",
+        description="Coordination zone.",
     )
 
     # Node Types
@@ -171,40 +145,40 @@ class NetworkParameters(BaseModel):
         default=2,
         ge=1,
         le=5,
-        description="Fixed coordination nodes. Source: Design decision",
+        description="Fixed coordination nodes.",
     )
 
     mobile_responder_count: int = Field(
         default=48,
         ge=1,
-        description="Mobile responder nodes. Source: Design decision (50 - 2)",
+        description="Mobile responder nodes (50 - 2).",
     )
 
     # Communication Infrastructure
     radio_range_m: float = Field(
         default=100.0,
         gt=0,
-        description="Radio range in metres. Source: Ullah & Qayyum (2022)",
+        description="Radio range in metres.",
     )
 
     buffer_size_bytes: int = Field(
         default=26_214_400,  # 25 MB
         gt=0,
-        description="Node buffer capacity (25 MB). Source: Ullah & Qayyum (2022) — max tested value, avoids congestion-dominated regime",
+        description="Node buffer capacity (25 MB). Max tested value, avoids congestion-dominated regime.",
     )
 
     message_size_bytes: int = Field(
         default=512_000,  # 500 kB
         gt=0,
-        description="Message size (500 kB). Source: Kumar et al. (2023)",
+        description="Message size (500 kB).",
     )
 
     # Connectivity Scenarios
     connectivity_scenarios: list[float] = Field(
         default=[0.75, 0.40, 0.20],
         description=(
-            "Link availability percentages. Source: Karaman et al. (2026) - "
-            "75% post-earthquake, 40% at 48h, 20% severe degradation"
+            "Link availability percentages: "
+            "75% post-earthquake, 40% at 48h, 20% severe degradation."
         ),
     )
 
@@ -220,20 +194,79 @@ class NetworkParameters(BaseModel):
     # Mobility Model
     mobility_model: MobilityModel = Field(
         default=MobilityModel.RANDOM_WAYPOINT,
-        description="Mobility model. Source: Ullah & Qayyum (2022)",
+        description="Mobility model.",
     )
 
     speed_min_mps: float = Field(
         default=0.0,
         ge=0,
-        description="Min speed (0 m/s = stationary). Source: Ullah & Qayyum (2022)",
+        description="Min speed (0 m/s = stationary).",
     )
 
     speed_max_mps: float = Field(
         default=20.0,
         gt=0,
-        description="Max speed (20 m/s = vehicle). Source: Ullah & Qayyum (2022)",
+        description="Max speed (20 m/s = vehicle).",
     )
+
+    # Mobility timing
+    mobility_update_interval_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        description="Interval between mobility position updates (seconds). "
+        "1s granularity for smooth movement.",
+    )
+
+    encounter_check_interval_seconds: float = Field(
+        default=10.0,
+        gt=0,
+        description="Interval between encounter checks (seconds). "
+        "Balances PRoPHET update frequency vs performance.",
+    )
+
+    # Mobility pause times
+    pause_min_seconds: float = Field(
+        default=0.0,
+        ge=0,
+        description="Minimum pause duration at waypoints (seconds).",
+    )
+
+    pause_max_seconds: float = Field(
+        default=30.0,
+        ge=0,
+        description="Maximum pause duration at waypoints (seconds). "
+        "Brief pauses for realism.",
+    )
+
+    # Role-based mobility configuration
+    role_rescue_fraction: float = Field(
+        default=0.60,
+        ge=0,
+        le=1,
+        description="Fraction of mobile nodes assigned RESCUE role (60%).",
+    )
+    role_transport_fraction: float = Field(
+        default=0.25,
+        ge=0,
+        le=1,
+        description="Fraction of mobile nodes assigned TRANSPORT role (25%).",
+    )
+    # LIAISON fraction = 1 - rescue - transport (remainder)
+
+    role_rescue_speed_min: float = Field(default=1.0, ge=0)
+    role_rescue_speed_max: float = Field(default=5.0, gt=0)
+    role_rescue_pause_min: float = Field(default=10.0, ge=0)
+    role_rescue_pause_max: float = Field(default=60.0, ge=0)
+
+    role_transport_speed_min: float = Field(default=5.0, ge=0)
+    role_transport_speed_max: float = Field(default=20.0, gt=0)
+    role_transport_pause_min: float = Field(default=30.0, ge=0)
+    role_transport_pause_max: float = Field(default=120.0, ge=0)
+
+    role_liaison_speed_min: float = Field(default=1.0, ge=0)
+    role_liaison_speed_max: float = Field(default=10.0, gt=0)
+    role_liaison_pause_min: float = Field(default=0.0, ge=0)
+    role_liaison_pause_max: float = Field(default=30.0, ge=0)
 
     @field_validator("speed_max_mps")
     @classmethod
@@ -258,37 +291,33 @@ class PRoPHETParameters(BaseModel):
     time-based P_enc calculation and uses MAX-based transitivity to prevent
     delivery predictability saturation.
 
-    Sources:
-        - Grasic et al. (2011): PRoPHETv2 specification (CHANTS '11)
-        - Lindgren et al. (2012): RFC 6693
     """
 
     p_enc_max: float = Field(
         default=0.5,
         gt=0,
         le=1,
-        description="Maximum encounter probability. Source: Grasic et al. (2011)",
+        description="Maximum encounter probability.",
     )
 
     i_typ: float = Field(
         default=1800.0,
         gt=0,
-        description="Typical inter-encounter interval in seconds. "
-        "Source: Grasic et al. (2011)",
+        description="Typical inter-encounter interval in seconds.",
     )
 
     beta: float = Field(
         default=0.9,
         gt=0,
         le=1,
-        description="Transitivity constant (β). Source: Grasic et al. (2011)",
+        description="Transitivity constant (β).",
     )
 
     gamma: float = Field(
         default=0.999885791,
         gt=0,
         lt=1,
-        description="Aging constant (γ). Source: Grasic et al. (2011)",
+        description="Aging constant (γ).",
     )
 
 
@@ -296,15 +325,11 @@ class CommunicationParameters(BaseModel):
     """
     Phase 2: Communication Layer Parameters.
 
-    Sources:
-        - Grasic et al. (2011): PRoPHETv2 protocol parameters
-        - Ullah & Qayyum (2022): Message TTL, transmit speed, buffer policy
-        - Castillo et al. (2024): Protocol selection rationale
     """
 
     routing_protocol: Literal["prophet"] = Field(
         default="prophet",
-        description="DTN routing protocol. Source: Castillo et al. (2024)",
+        description="DTN routing protocol.",
     )
 
     prophet: PRoPHETParameters = Field(
@@ -315,13 +340,13 @@ class CommunicationParameters(BaseModel):
     message_ttl_seconds: int = Field(
         default=18000,  # 300 minutes
         gt=0,
-        description="Message TTL (300 min). Source: Ullah & Qayyum (2022)",
+        description="Message TTL (300 min).",
     )
 
     transmit_speed_bps: int = Field(
         default=2_000_000,  # 2 Mbps
         gt=0,
-        description="Transmit speed (2 Mbps). Source: Ullah & Qayyum (2022)",
+        description="Transmit speed (2 Mbps).",
     )
 
     update_interval_seconds: float = Field(
@@ -330,12 +355,18 @@ class CommunicationParameters(BaseModel):
         description="Predictability aging time unit in seconds. "
         "γ^k applied where k = elapsed / update_interval. "
         "30s aligns aging rate with NODE_ENCOUNTER interval (10s) "
-        "so ~3 encounters per aging unit. Source: Kumar et al. (2023)",
+        "so ~3 encounters per aging unit.",
     )
 
     buffer_drop_policy: BufferDropPolicy = Field(
         default=BufferDropPolicy.DROP_OLDEST,
-        description="Buffer policy. Source: Ullah & Qayyum (2022)",
+        description="Buffer policy.",
+    )
+
+    min_predictability_threshold: float = Field(
+        default=0.001,
+        ge=0,
+        description="Predictabilities below this value are pruned to save memory.",
     )
 
 
@@ -348,30 +379,27 @@ class UrgencyDistribution(BaseModel):
     """
     Task urgency distribution.
 
-    Sources:
-        - Li et al. (2025): Emergency facility demand patterns
-        - Oksuz & Satoglu (2024): Casualty allocation prioritisation
     """
 
     high: float = Field(
         default=0.20,
         ge=0,
         le=1,
-        description="High-urgency proportion (20%). Source: Li et al. (2025)",
+        description="High-urgency proportion (20%).",
     )
 
     medium: float = Field(
         default=0.50,
         ge=0,
         le=1,
-        description="Medium-urgency proportion (50%). Source: Li et al. (2025)",
+        description="Medium-urgency proportion (50%).",
     )
 
     low: float = Field(
         default=0.30,
         ge=0,
         le=1,
-        description="Low-urgency proportion (30%). Source: Li et al. (2025)",
+        description="Low-urgency proportion (30%).",
     )
 
     @field_validator("low")
@@ -390,27 +418,22 @@ class ScenarioParameters(BaseModel):
     """
     Phase 3: Scenario Generation Parameters.
 
-    Sources:
-        - Kumar et al. (2023): Message generation rate
-        - Pu et al. (2025): Poisson process for arrivals
-        - Ullah & Qayyum (2022): Simulation duration
-        - Law (2015): Statistical design (30 runs)
     """
 
     scenario_type: Literal["generic_emergency"] = Field(
         default="generic_emergency",
-        description="Scenario type. Source: FEMA (2024)",
+        description="Scenario type.",
     )
 
     message_generation_model: Literal["poisson"] = Field(
         default="poisson",
-        description="Arrival model. Source: Pu et al. (2025)",
+        description="Arrival model.",
     )
 
     message_rate_per_minute: float = Field(
         default=2.0,
         gt=0,
-        description="Message rate (2/min). Source: Kumar et al. (2023)",
+        description="Message rate (2/min).",
     )
 
     urgency_distribution: UrgencyDistribution = Field(
@@ -421,7 +444,7 @@ class ScenarioParameters(BaseModel):
     simulation_duration_seconds: int = Field(
         default=6000,  # ~100 minutes
         gt=0,
-        description="Duration (6000s). Source: Ullah & Qayyum (2022)",
+        description="Duration (6000s).",
     )
 
     warmup_period_seconds: int = Field(
@@ -430,13 +453,13 @@ class ScenarioParameters(BaseModel):
         description="Warm-up period (seconds). Set to 0 for cold-start evaluation: "
         "emergency coordination systems activate from zero encounter history, "
         "and initialisation variability is addressed through multiple "
-        "replications (Grassmann, 2008). Source: Grassmann (2008)",
+        "replications.",
     )
 
     runs_per_configuration: int = Field(
         default=30,
         ge=1,
-        description="Runs per config (30). Source: Law (2015)",
+        description="Runs per config (30).",
     )
 
 
@@ -449,24 +472,19 @@ class CoordinationParameters(BaseModel):
     """
     Phase 4: Coordination Layer Parameters.
 
-    Sources:
-        - Kaji et al. (2025): Update interval, urgency-first ordering
-        - Cabral et al. (2018): 30-minute response time standard
-        - Rosas et al. (2023): Priority levels
-        - Ullah & Qayyum (2022): Path availability threshold
     """
 
     update_interval_seconds: int = Field(
         default=1800,  # 30 minutes
         gt=0,
-        description="Update interval (30 min). Source: Kaji et al. (2025)",
+        description="Update interval (30 min).",
     )
 
     priority_levels: int = Field(
         default=3,
         ge=2,
         le=5,
-        description="Priority levels (3). Source: Rosas et al. (2023)",
+        description="Priority levels (3).",
     )
 
     available_path_threshold: float = Field(
@@ -475,16 +493,15 @@ class CoordinationParameters(BaseModel):
         lt=1,
         description="Path threshold (P > 0.3). Nodes with genuine coord-zone "
         "encounter history converge to P ≈ 0.45–0.50 while marginal transitivity "
-        "nodes stabilise at P ≈ 0.05–0.20. Source: Ullah & Qayyum (2022) SAAD",
+        "nodes stabilise at P ≈ 0.05–0.20.",
     )
 
-    # Static scoring weights (Boondirek et al., 2014; Nelson et al., 2009)
+    # Static scoring weights
     predictability_weight: float = Field(
         default=0.2,
         ge=0,
         le=1,
         description="α — predictability weight in scoring formula. "
-        "Source: Boondirek et al. (2014) DiPRoPHET",
     )
 
     recency_weight: float = Field(
@@ -492,7 +509,7 @@ class CoordinationParameters(BaseModel):
         ge=0,
         le=1,
         description="γ_r — encounter recency weight in scoring formula. "
-        "R_norm = 1 − min(Δt / 1800, 1.0). Source: Nelson et al. (2009)",
+        "R_norm = 1 − min(Δt / 1800, 1.0).",
     )
 
     proximity_weight: float = Field(
@@ -500,22 +517,36 @@ class CoordinationParameters(BaseModel):
         ge=0,
         le=1,
         description="β — proximity weight in scoring formula. "
-        "Source: Boondirek et al. (2014) DiPRoPHET",
+    )
+
+    workload_penalty_weight: float = Field(
+        default=0.2,
+        ge=0,
+        le=1,
+        description="λ — workload penalty weight. Discourages re-assigning the "
+        "same responder across consecutive coordination cycles. "
+    )
+
+    recency_reference_seconds: float = Field(
+        default=1800.0,
+        gt=0,
+        description="T_REF for encounter recency normalisation: "
+        "R_norm = 1 − min(Δt / T_REF, 1.0). Matches PRoPHET I_typ.",
     )
 
     proximity_method: Literal["euclidean"] = Field(
         default="euclidean",
-        description="Distance method. Source: Keykhaei et al. (2024)",
+        description="Distance method.",
     )
 
     adaptive_task_order: Literal["urgency_first"] = Field(
         default="urgency_first",
-        description="Adaptive ordering. Source: Kaji et al. (2025)",
+        description="Adaptive ordering.",
     )
 
     baseline_task_order: Literal["fcfs"] = Field(
         default="fcfs",
-        description="Baseline ordering (FCFS). Source: Design decision",
+        description="Baseline ordering (FCFS).",
     )
 
 
@@ -588,6 +619,14 @@ class SimulationConfig(BaseModel):
     def total_nodes(self) -> int:
         """Total node count."""
         return self.network.coordination_node_count + self.network.mobile_responder_count
+
+    @property
+    def simulation_area_diagonal_m(self) -> float:
+        """Diagonal of the simulation area (metres), for distance normalisation."""
+        import math
+        w = self.network.simulation_area.width_m
+        h = self.network.simulation_area.height_m
+        return math.sqrt(w * w + h * h)
 
     def get_message_transmission_time_seconds(self) -> float:
         """Time to transmit one message in seconds."""

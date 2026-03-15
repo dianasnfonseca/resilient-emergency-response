@@ -23,11 +23,6 @@ Enums:
 Factory Functions:
     create_coordinator: Create coordinator by algorithm type
 
-Sources:
-    - Kaji et al. (2025): Distributed architecture, update interval
-    - Rosas et al. (2023): Priority levels
-    - Ullah & Qayyum (2022): Path availability threshold
-    - Keykhaei et al. (2024): Proximity calculation
 """
 
 from ercs.coordination.algorithms import (

@@ -7,26 +7,22 @@ Groups:
     C — TestBug2ThresholdFiltering: P > 0.3 excludes marginal nodes
     D — TestWorkloadBalancing: soft W_inter penalty + distance normalisation
 
-Sources:
-    Shah & Ahmed (2025) — absolute DP values (SN Computer Science)
-    Ullah & Qayyum (2022) — SAAD forwarder threshold
-    Boondirek et al. (2014) — DiPRoPHET distance-dominant weighting
-    Deng et al. (2016) — soft workload balancing (IEEE TMC)
 """
 
 import pytest
 
-from ercs.config.parameters import CoordinationParameters, UrgencyLevel
-from ercs.coordination.algorithms import (
-    PREDICTABILITY_WEIGHT,
-    PROXIMITY_WEIGHT,
-    RECENCY_WEIGHT,
-    SIMULATION_AREA_DIAGONAL_M,
-    WORKLOAD_PENALTY_WEIGHT,
-    AdaptiveCoordinator,
-)
+from ercs.config.parameters import CoordinationParameters, SimulationConfig, UrgencyLevel
+from ercs.coordination.algorithms import AdaptiveCoordinator
 from ercs.scenario.generator import Task
 from conftest import PATH_THRESHOLD
+
+# Derive constants from config (single source of truth)
+_CONFIG = SimulationConfig()
+PREDICTABILITY_WEIGHT = _CONFIG.coordination.predictability_weight
+RECENCY_WEIGHT = _CONFIG.coordination.recency_weight
+PROXIMITY_WEIGHT = _CONFIG.coordination.proximity_weight
+WORKLOAD_PENALTY_WEIGHT = _CONFIG.coordination.workload_penalty_weight
+SIMULATION_AREA_DIAGONAL_M = _CONFIG.simulation_area_diagonal_m
 
 
 # ============================================================================
@@ -90,19 +86,19 @@ class TestConstants:
     """Verify module-level constants after the fix."""
 
     def test_predictability_weight(self):
-        """α = 0.2 (Boondirek et al., 2014; adjusted for recency)."""
+        """α = 0.2."""
         assert PREDICTABILITY_WEIGHT == pytest.approx(0.2)
 
     def test_recency_weight(self):
-        """γ_r = 0.2 (Nelson et al., 2009)."""
+        """γ_r = 0.2."""
         assert RECENCY_WEIGHT == pytest.approx(0.2)
 
     def test_proximity_weight(self):
-        """β = 0.6 (Boondirek et al., 2014; adjusted for recency)."""
+        """β = 0.6."""
         assert PROXIMITY_WEIGHT == pytest.approx(0.6)
 
     def test_workload_penalty_weight(self):
-        """λ = 0.2 (Cui et al., 2022)."""
+        """λ = 0.2."""
         assert WORKLOAD_PENALTY_WEIGHT == pytest.approx(0.2)
 
     def test_simulation_area_diagonal(self):
@@ -110,7 +106,7 @@ class TestConstants:
         assert SIMULATION_AREA_DIAGONAL_M == pytest.approx(3354.1, abs=0.1)
 
     def test_default_path_threshold(self):
-        """Default threshold = 0.3 (Ullah & Qayyum, 2022 SAAD)."""
+        """Default threshold = 0.3."""
         params = CoordinationParameters()
         assert params.available_path_threshold == pytest.approx(0.3)
         assert PATH_THRESHOLD == pytest.approx(0.3)
@@ -377,8 +373,7 @@ class TestWorkloadBalancing:
 
     W_inter = 1 for responders assigned in a previous cycle, reducing their
     score by λ = 0.2.  This discourages re-assignment proportionally without
-    hard exclusion, following Deng et al. (2016, IEEE TMC) and Boondirek
-    et al. (2014) who use score-based selection without capacity constraints.
+    hard exclusion.
     """
 
     def test_inter_cycle_penalty_flips_selection(self):

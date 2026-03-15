@@ -21,12 +21,16 @@ from ercs.network.mobility import (
     MobileNodeState,
     MobilityState,
     RoleConfig,
-    ROLE_CONFIGS,
+    _build_role_configs,
     Waypoint,
     _assign_roles,
     calculate_encounters,
     update_topology_edges,
 )
+from ercs.config.parameters import NetworkParameters
+
+# Build role configs from default parameters (single source of truth)
+ROLE_CONFIGS = _build_role_configs(NetworkParameters())
 
 
 class TestWaypoint:

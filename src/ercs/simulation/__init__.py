@@ -18,10 +18,6 @@ Factory Functions:
     run_simulation: Run a single simulation
     run_experiment: Run complete experiment (180 runs)
 
-Sources:
-    - Ullah & Qayyum (2022): Simulation duration (6000s)
-    - Law (2015): Statistical design (30 runs)
-    - Kaji et al. (2025): Coordination update interval
 """
 
 from ercs.simulation.engine import (

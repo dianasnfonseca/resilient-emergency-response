@@ -82,7 +82,8 @@ Phase 1  NETWORK             topology.py + mobility.py -- 50 nodes, edges, role-
 | `scripts/diagnose_recency.py` | -- | Encounter recency scoring diagnostics |
 | `scripts/diagnose_seed49.py` | -- | Seed-specific delivery failure debugging |
 | `scripts/validate_seeds.py` | -- | Seed connectivity validation utility |
-| `tests/conftest.py` | -- | Centralised test constants (mirrors spec defaults) |
+| `tests/test_config_consistency.py` | -- | Config consistency tests (YAML vs Pydantic, computed values, no hardcoded overrides) |
+| `tests/conftest.py` | -- | Centralised test constants (derived from `SimulationConfig` defaults) |
 | `configs/default.yaml` | -- | Default experiment configuration |
 
 ---
@@ -137,8 +138,9 @@ resilient-emergency-response/
 ├── configs/
 │   └── default.yaml                   # Default experiment configuration
 ├── docs/
-│   └── GUIDE.md                       # This file
-├── tests/                             # 384 passing tests
+│   ├── GUIDE.md                       # This file
+│   └── Appendix_D_Technical_Reference_v1.md  # Formal thesis appendix
+├── tests/                             # 411 passing tests
 │   ├── conftest.py
 │   ├── test_network.py
 │   ├── test_mobility.py
@@ -150,6 +152,7 @@ resilient-emergency-response/
 │   ├── test_warmup.py
 │   ├── test_encounter_recency.py
 │   ├── test_algorithm_fix.py
+│   ├── test_config_consistency.py
 │   └── test_diagnostic_anomalies.py
 └── outputs/
     └── figures/                       # Saved plots and visualizations
@@ -629,6 +632,7 @@ simulation area.
 - `total_simulation_duration` -> warmup_period_seconds + simulation_duration_seconds
 - `total_experimental_runs` -> 2 x 3 x 30 = 180
 - `total_nodes` -> coordination_node_count + mobile_responder_count = 50
+- `simulation_area_diagonal_m` -> sqrt(width^2 + height^2) = ~3354.1 m
 - `get_message_transmission_time_seconds()` -> ~2.048 seconds
 
 ### Connectivity Scenarios
@@ -925,7 +929,7 @@ python scripts/run_experiment.py --config configs/default.yaml --dry-run
 ### Tests
 
 ```bash
-pytest                      # All 384 tests
+pytest                      # All 411 tests
 pytest --cov=ercs           # With coverage report
 pytest -m "not slow"        # Exclude slow tests
 ```

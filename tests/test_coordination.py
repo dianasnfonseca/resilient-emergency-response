@@ -5,14 +5,8 @@ These tests verify that the coordination algorithms correctly implement
 the specifications from the Phase 4 documentation:
 - Adaptive: urgency-first ordering, network-aware assignment (P > 0)
 - Baseline: FCFS ordering, proximity-only assignment
-- 30-minute update interval (Kaji et al., 2025)
-- Euclidean distance for proximity (Keykhaei et al., 2024)
-
-Sources verified:
-    - Kaji et al. (2025): Update interval, urgency prioritisation
-    - Ullah & Qayyum (2022): P > 0 threshold
-    - Rosas et al. (2023): Three priority levels
-    - Keykhaei et al. (2024): Euclidean distance
+- 30-minute update interval
+- Euclidean distance for proximity
 """
 
 import pytest
@@ -881,22 +875,22 @@ class TestPhase4Parameters:
     """Verify Phase 4 parameters match specification."""
 
     def test_update_interval(self):
-        """Verify update interval = 30 minutes (Kaji et al., 2025)."""
+        """Verify update interval = 30 minutes."""
         params = CoordinationParameters()
         assert params.update_interval_seconds == COORDINATION_INTERVAL_S  # 30 * 60
 
     def test_priority_levels(self):
-        """Verify 3 priority levels (Rosas et al., 2023)."""
+        """Verify 3 priority levels."""
         params = CoordinationParameters()
         assert params.priority_levels == PRIORITY_LEVELS
 
     def test_path_threshold(self):
-        """Verify path threshold = 0.3 (Ullah & Qayyum, 2022 SAAD)."""
+        """Verify path threshold = 0.3."""
         params = CoordinationParameters()
         assert params.available_path_threshold == PATH_THRESHOLD
 
     def test_proximity_method(self):
-        """Verify Euclidean distance (Keykhaei et al., 2024)."""
+        """Verify Euclidean distance."""
         params = CoordinationParameters()
         assert params.proximity_method == "euclidean"
 

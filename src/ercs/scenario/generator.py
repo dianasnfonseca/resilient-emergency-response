@@ -11,14 +11,6 @@ The scenario generator produces:
 - Source/destination assignments for coordination messages
 - Complete scenario timelines for simulation execution
 
-Sources:
-    - Kumar et al. (2023): Message generation rate (2/min, 500 kB)
-    - Pu et al. (2025): Poisson process for task arrivals
-    - Li et al. (2025): Urgency distribution (20% H, 50% M, 30% L)
-    - Oksuz & Satoglu (2024): Casualty allocation prioritisation
-    - Ullah & Qayyum (2022): Simulation duration (6000s)
-    - Law (2015): Statistical design (30 runs per configuration)
-    - FEMA (2024): Generic emergency response framework
 """
 
 from collections.abc import Iterator
@@ -196,15 +188,9 @@ class ScenarioGenerator:
     classification following Phase 3 specification.
 
     The generator produces realistic emergency scenarios with:
-    - Tasks arriving according to Poisson process (Kumar et al., 2023)
-    - Three-level urgency classification (Li et al., 2025)
+    - Tasks arriving according to Poisson process
+    - Three-level urgency classification
     - Configurable duration and connectivity levels
-
-    Sources:
-        - Kumar et al. (2023): Message rate (2/min)
-        - Pu et al. (2025): Poisson arrival process
-        - Li et al. (2025): Urgency distribution
-        - Ullah & Qayyum (2022): Duration (6000s)
 
     Attributes:
         scenario_params: Scenario generation parameters
@@ -362,7 +348,7 @@ class ScenarioGenerator:
         """
         Select urgency level based on configured distribution.
 
-        Distribution (Li et al., 2025; Oksuz & Satoglu, 2024):
+        Distribution:
         - High: 20%
         - Medium: 50%
         - Low: 30%

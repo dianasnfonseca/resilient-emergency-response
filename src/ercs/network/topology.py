@@ -5,10 +5,6 @@ This module generates network topologies for emergency response simulation,
 implementing the two-zone disaster area model with coordination and mobile
 responder nodes.
 
-Sources:
-    - Ullah & Qayyum (2022): Network scale, area dimensions, radio range
-    - Karaman et al. (2026): Connectivity scenarios from Turkey earthquake
-    - Keykhaei et al. (2024): Initial node placement methodology
 """
 
 from dataclasses import dataclass, field
@@ -238,9 +234,6 @@ class TopologyGenerator:
     - Incident zone: Where emergency tasks originate, mobile responders operate
     - Coordination zone: Fixed infrastructure for message aggregation
     
-    Sources:
-        - Ullah & Qayyum (2022): Two-zone model, node placement
-        - Keykhaei et al. (2024): Uniform random distribution for initial placement
     """
     
     def __init__(self, parameters: NetworkParameters, random_seed: int | None = None):
@@ -341,7 +334,7 @@ class TopologyGenerator:
         Generate mobile responder nodes with uniform random positions.
         
         Initial positions are uniformly distributed within the incident zone,
-        following standard DTN simulation practice (Ullah & Qayyum, 2022).
+        following standard DTN simulation practice.
         
         Returns:
             Dictionary of mobile node IDs to Node objects

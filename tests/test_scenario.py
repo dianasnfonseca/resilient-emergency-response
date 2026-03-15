@@ -3,17 +3,10 @@ Tests for Scenario Generation (Phase 3).
 
 These tests verify that the scenario generator correctly implements
 the specifications from the Phase 3 documentation:
-- Poisson process task arrivals with rate 2/minute (Kumar et al., 2023)
-- Urgency distribution: 20% H, 50% M, 30% L (Li et al., 2025)
-- Simulation duration: 6000 seconds (Ullah & Qayyum, 2022)
-- 30 runs per configuration (Law, 2015)
-
-Sources verified:
-    - Kumar et al. (2023): Message generation parameters
-    - Pu et al. (2025): Poisson process arrivals
-    - Li et al. (2025): Urgency distribution
-    - Ullah & Qayyum (2022): Duration
-    - Law (2015): Statistical design
+- Poisson process task arrivals with rate 2/minute
+- Urgency distribution: 20% H, 50% M, 30% L
+- Simulation duration: 6000 seconds
+- 30 runs per configuration
 """
 
 import numpy as np
@@ -549,37 +542,37 @@ class TestPhase3Parameters:
     """Verify Phase 3 parameters match specification."""
 
     def test_message_rate(self):
-        """Verify message rate = 2/minute (Kumar et al., 2023)."""
+        """Verify message rate = 2/minute."""
         params = ScenarioParameters()
         assert params.message_rate_per_minute == MESSAGE_RATE_PER_MIN
 
     def test_simulation_duration(self):
-        """Verify duration = 6000 seconds (Ullah & Qayyum, 2022)."""
+        """Verify duration = 6000 seconds."""
         params = ScenarioParameters()
         assert params.simulation_duration_seconds == SIMULATION_DURATION_S
 
     def test_warmup_period(self):
-        """Verify warm-up period = 0s (cold-start, Grassmann 2008)."""
+        """Verify warm-up period = 0s (cold-start)."""
         params = ScenarioParameters()
         assert params.warmup_period_seconds == WARMUP_PERIOD_S
 
     def test_runs_per_configuration(self):
-        """Verify 30 runs per configuration (Law, 2015)."""
+        """Verify 30 runs per configuration."""
         params = ScenarioParameters()
         assert params.runs_per_configuration == RUNS_PER_CONFIG
 
     def test_urgency_distribution_high(self):
-        """Verify high urgency = 20% (Li et al., 2025)."""
+        """Verify high urgency = 20%."""
         dist = UrgencyDistribution()
         assert dist.high == URGENCY_HIGH_PROP
 
     def test_urgency_distribution_medium(self):
-        """Verify medium urgency = 50% (Li et al., 2025)."""
+        """Verify medium urgency = 50%."""
         dist = UrgencyDistribution()
         assert dist.medium == URGENCY_MEDIUM_PROP
 
     def test_urgency_distribution_low(self):
-        """Verify low urgency = 30% (Li et al., 2025)."""
+        """Verify low urgency = 30%."""
         dist = UrgencyDistribution()
         assert dist.low == URGENCY_LOW_PROP
 
@@ -590,12 +583,12 @@ class TestPhase3Parameters:
         assert total == pytest.approx(1.0)
 
     def test_poisson_generation_model(self):
-        """Verify Poisson process model (Pu et al., 2025)."""
+        """Verify Poisson process model."""
         params = ScenarioParameters()
         assert params.message_generation_model == "poisson"
 
     def test_generic_emergency_scenario(self):
-        """Verify generic emergency framework (FEMA, 2024)."""
+        """Verify generic emergency framework."""
         params = ScenarioParameters()
         assert params.scenario_type == "generic_emergency"
 

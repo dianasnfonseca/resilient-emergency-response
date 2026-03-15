@@ -17,12 +17,6 @@ Factory Functions:
     generate_scenario: Create a single scenario
     generate_experiment_scenarios: Create scenarios for full experiment
 
-Sources:
-    - Kumar et al. (2023): Message generation rate
-    - Pu et al. (2025): Poisson arrival process
-    - Li et al. (2025): Urgency distribution
-    - Ullah & Qayyum (2022): Simulation duration
-    - Law (2015): Statistical design (30 runs)
 """
 
 from ercs.scenario.generator import (

@@ -22,18 +22,21 @@ from ercs.config.parameters import (
     NetworkParameters,
     ResponderRole,
     SimulationConfig,
-    ZoneConfig,
 )
 from ercs.coordination.algorithms import AlgorithmType
 from ercs.network.mobility import (
     MobilityManager,
-    MobilityState,
-    ROLE_CONFIGS,
-    ROLE_DISTRIBUTION,
+    _build_role_configs,
+    _build_role_distribution,
     _assign_roles,
 )
 from ercs.network.topology import generate_topology
-from ercs.simulation.engine import SimulationEngine, SimulationEventType
+from ercs.simulation.engine import SimulationEngine
+
+# Build from config (single source of truth)
+_NET_PARAMS = NetworkParameters()
+ROLE_CONFIGS = _build_role_configs(_NET_PARAMS)
+ROLE_DISTRIBUTION = _build_role_distribution(_NET_PARAMS)
 
 
 # ============================================================================

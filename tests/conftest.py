@@ -1,60 +1,66 @@
 """
-Centralised test constants derived from the ERCS specification.
+Centralised test constants derived from the ERCS configuration.
 
-These mirror the default values in ``src/ercs/config/parameters.py``.
-If the spec changes, update HERE — every test file imports from conftest.
+All values are derived from ``SimulationConfig`` defaults — the single source
+of truth.  If the spec changes, update ``parameters.py`` and ``default.yaml``;
+these constants will follow automatically.
 
 Usage in tests::
 
-    from conftest import SIMULATION_DURATION_S, P_INIT, RADIO_RANGE_M
+    from conftest import SIMULATION_DURATION_S, P_ENC_MAX, RADIO_RANGE_M
 """
 
+from ercs.config.parameters import SimulationConfig
+
+# Build the canonical default config once
+_CONFIG = SimulationConfig()
+
 # =============================================================================
-# Phase 1: Network Topology (Ullah & Qayyum, 2022)
+# Phase 1: Network Topology
 # =============================================================================
 
-NODE_COUNT = 50
-COORDINATION_NODE_COUNT = 2
-MOBILE_RESPONDER_COUNT = 48
+NODE_COUNT = _CONFIG.total_nodes
+COORDINATION_NODE_COUNT = _CONFIG.network.coordination_node_count
+MOBILE_RESPONDER_COUNT = _CONFIG.network.mobile_responder_count
 
 # Simulation area (metres)
-SIMULATION_AREA_WIDTH_M = 3000.0
-SIMULATION_AREA_HEIGHT_M = 1500.0
+SIMULATION_AREA_WIDTH_M = _CONFIG.network.simulation_area.width_m
+SIMULATION_AREA_HEIGHT_M = _CONFIG.network.simulation_area.height_m
 
 # Incident zone (metres)
-INCIDENT_ZONE_WIDTH_M = 700.0
-INCIDENT_ZONE_HEIGHT_M = 600.0
+INCIDENT_ZONE_WIDTH_M = _CONFIG.network.incident_zone.width_m
+INCIDENT_ZONE_HEIGHT_M = _CONFIG.network.incident_zone.height_m
 
 # Coordination zone (metres)
-COORDINATION_ZONE_WIDTH_M = 50.0
-COORDINATION_ZONE_HEIGHT_M = 50.0
-COORDINATION_ZONE_ORIGIN_X = 800.0
+COORDINATION_ZONE_WIDTH_M = _CONFIG.network.coordination_zone.width_m
+COORDINATION_ZONE_HEIGHT_M = _CONFIG.network.coordination_zone.height_m
+COORDINATION_ZONE_ORIGIN_X = _CONFIG.network.coordination_zone.origin_x
 
 # Communication infrastructure
-RADIO_RANGE_M = 100.0
-BUFFER_SIZE_BYTES = 26_214_400  # 25 MB
-MESSAGE_SIZE_BYTES = 512_000  # 500 kB
+RADIO_RANGE_M = _CONFIG.network.radio_range_m
+BUFFER_SIZE_BYTES = _CONFIG.network.buffer_size_bytes
+MESSAGE_SIZE_BYTES = _CONFIG.network.message_size_bytes
 
-# Connectivity scenarios (Karaman et al., 2026)
-CONNECTIVITY_SCENARIOS = [0.75, 0.40, 0.20]
-CONNECTIVITY_MILD = 0.75
-CONNECTIVITY_MODERATE = 0.40
-CONNECTIVITY_SEVERE = 0.20
+# Connectivity scenarios
+CONNECTIVITY_SCENARIOS = _CONFIG.network.connectivity_scenarios
+CONNECTIVITY_MILD = CONNECTIVITY_SCENARIOS[0]    # 0.75
+CONNECTIVITY_MODERATE = CONNECTIVITY_SCENARIOS[1]  # 0.40
+CONNECTIVITY_SEVERE = CONNECTIVITY_SCENARIOS[2]    # 0.20
 
-# Mobility (Ullah & Qayyum, 2022)
-SPEED_MAX_MPS = 20.0
+# Mobility
+SPEED_MAX_MPS = _CONFIG.network.speed_max_mps
 
 # =============================================================================
-# Phase 2: Communication / PRoPHETv2 (Grasic et al., 2011)
+# Phase 2: Communication / PRoPHETv2
 # =============================================================================
 
-P_ENC_MAX = 0.5
-I_TYP = 1800.0
-BETA = 0.9
-GAMMA = 0.999885791
-MESSAGE_TTL_S = 18_000  # 300 minutes
-TRANSMIT_SPEED_BPS = 2_000_000
-AGING_INTERVAL_S = 30.0
+P_ENC_MAX = _CONFIG.communication.prophet.p_enc_max
+I_TYP = _CONFIG.communication.prophet.i_typ
+BETA = _CONFIG.communication.prophet.beta
+GAMMA = _CONFIG.communication.prophet.gamma
+MESSAGE_TTL_S = _CONFIG.communication.message_ttl_seconds
+TRANSMIT_SPEED_BPS = _CONFIG.communication.transmit_speed_bps
+AGING_INTERVAL_S = _CONFIG.communication.update_interval_seconds
 
 # Legacy alias kept for tests that still reference P_INIT
 P_INIT = P_ENC_MAX
@@ -63,34 +69,34 @@ P_INIT = P_ENC_MAX
 # Phase 3: Scenario Generation
 # =============================================================================
 
-MESSAGE_RATE_PER_MIN = 2.0
-SIMULATION_DURATION_S = 6_000  # ~100 minutes (Ullah & Qayyum, 2022)
-WARMUP_PERIOD_S = 0  # Cold-start (Grassmann, 2008)
-TOTAL_DURATION_S = 6_000  # No warm-up: equals simulation_duration_seconds
-RUNS_PER_CONFIG = 30  # (Law, 2015)
+MESSAGE_RATE_PER_MIN = _CONFIG.scenario.message_rate_per_minute
+SIMULATION_DURATION_S = _CONFIG.scenario.simulation_duration_seconds
+WARMUP_PERIOD_S = _CONFIG.scenario.warmup_period_seconds
+TOTAL_DURATION_S = SIMULATION_DURATION_S + WARMUP_PERIOD_S
+RUNS_PER_CONFIG = _CONFIG.scenario.runs_per_configuration
 
-# Urgency distribution (Li et al., 2025)
-URGENCY_HIGH_PROP = 0.20
-URGENCY_MEDIUM_PROP = 0.50
-URGENCY_LOW_PROP = 0.30
+# Urgency distribution
+URGENCY_HIGH_PROP = _CONFIG.scenario.urgency_distribution.high
+URGENCY_MEDIUM_PROP = _CONFIG.scenario.urgency_distribution.medium
+URGENCY_LOW_PROP = _CONFIG.scenario.urgency_distribution.low
 
 # =============================================================================
 # Phase 4: Coordination
 # =============================================================================
 
-COORDINATION_INTERVAL_S = 1_800  # 30 minutes (Kaji et al., 2025)
-PRIORITY_LEVELS = 3
-PATH_THRESHOLD = 0.3
+COORDINATION_INTERVAL_S = _CONFIG.coordination.update_interval_seconds
+PRIORITY_LEVELS = _CONFIG.coordination.priority_levels
+PATH_THRESHOLD = _CONFIG.coordination.available_path_threshold
 
-# Static scoring weights (Boondirek et al., 2014; Nelson et al., 2009)
-PREDICTABILITY_WEIGHT = 0.2
-RECENCY_WEIGHT = 0.2
-PROXIMITY_WEIGHT = 0.6
+# Static scoring weights
+PREDICTABILITY_WEIGHT = _CONFIG.coordination.predictability_weight
+RECENCY_WEIGHT = _CONFIG.coordination.recency_weight
+PROXIMITY_WEIGHT = _CONFIG.coordination.proximity_weight
 
 # =============================================================================
-# Experiment 
+# Experiment
 # =============================================================================
 
 TOTAL_CONFIGURATIONS = 6  # 2 algorithms × 3 connectivity levels
-TOTAL_EXPERIMENTAL_RUNS = 180  # 6 × 30 runs
+TOTAL_EXPERIMENTAL_RUNS = _CONFIG.total_experimental_runs
 ALGORITHMS = ["adaptive", "baseline"]

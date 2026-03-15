@@ -629,7 +629,7 @@ class TestPhase5Parameters:
 class TestConnectionUpEncounters:
     """Tests that PRoPHET encounter updates fire only on connection-up.
 
-    RFC 6693 (Lindgren et al., 2012): predictability updates should occur
+    RFC 6693: predictability updates should occur
     when two nodes first meet, not repeatedly during sustained contact.
     """
 

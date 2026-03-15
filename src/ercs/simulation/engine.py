@@ -16,10 +16,6 @@ The simulation engine provides:
 - Results collection for Phase 6 analysis
 - Reproducible experimental execution
 
-Sources:
-    - Ullah & Qayyum (2022): Simulation duration (6000s), Random Waypoint mobility
-    - Law (2015): Statistical design (30 runs per configuration)
-    - Kaji et al. (2025): 30-minute coordination update interval
 """
 
 import json
@@ -141,7 +137,7 @@ class SimulationResults:
     response_times: list[tuple[str, float]] = field(default_factory=list)
     delivery_times: list[tuple[str, float]] = field(default_factory=list)
 
-    # Coordination cycle tracking — System Availability (Karaman et al., 2026)
+    # Coordination cycle tracking — System Availability
     total_coordination_cycles: int = 0
     active_coordination_cycles: int = 0
 
@@ -168,9 +164,7 @@ class SimulationResults:
 
         NOTE: This is NOT the Coordination Response Time defined in SpecDesign
         Section 1.4.10. The SpecDesign metric (delivery_time - creation_time)
-        is average_delivery_time.
-        Source: distinguished from DTN end-to-end delay
-        (Ullah & Qayyum, 2022; Rosas et al., 2023).
+        is average_delivery_time. Distinguished from DTN end-to-end delay.
         """
         if not self.response_times:
             return None
@@ -189,7 +183,7 @@ class SimulationResults:
     def system_availability(self) -> float | None:
         """System Availability = Active Cycles / Total Cycles × 100%.
 
-        Source: Karaman et al. (2026); SpecDesign Section 1.4.10
+        SpecDesign Section 1.4.10.
         """
         if self.total_coordination_cycles == 0:
             return None
@@ -270,11 +264,6 @@ class SimulationEngine:
     - Dynamic edge updates based on node positions
     - Node encounters based on proximity (100m radio range)
     - Message delivery tracking via PRoPHET protocol
-
-    Sources:
-        - Ullah & Qayyum (2022): 6000s simulation duration, Random Waypoint
-        - Kaji et al. (2025): 30-minute coordination updates
-        - Law (2015): 30 runs per configuration
 
     Attributes:
         config: Simulation configuration
@@ -403,6 +392,7 @@ class SimulationEngine:
         self._coordinator = create_coordinator(
             algorithm_type=self.algorithm_type,
             params=self.config.coordination,
+            area_diagonal_m=self.config.simulation_area_diagonal_m,
         )
         self._manager = CoordinationManager(
             coordinator=self._coordinator,
@@ -445,16 +435,14 @@ class SimulationEngine:
         """
         Initialize Random Waypoint mobility for mobile nodes.
         
-        Sources:
-            - Ullah & Qayyum (2022): Random Waypoint model, speed 0-20 m/s
-            - Chapter1_v2: Mobility model selection rationale
         """
+        net = self.config.network
         self._mobility = MobilityManager(
-            parameters=self.config.network,
-            speed_min=1.0,  # Minimum 1 m/s to ensure movement
-            speed_max=20.0,  # Source: Ullah & Qayyum (2022)
-            pause_min=0.0,
-            pause_max=30.0,  # Brief pauses for realism
+            parameters=net,
+            speed_min=max(1.0, net.speed_min_mps),  # Minimum 1 m/s to ensure movement
+            speed_max=net.speed_max_mps,
+            pause_min=net.pause_min_seconds,
+            pause_max=net.pause_max_seconds,
         )
         
         # Get initial positions from topology
@@ -486,7 +474,7 @@ class SimulationEngine:
         total_duration = self.config.total_simulation_duration
 
         # Schedule mobility updates throughout ENTIRE simulation (including warm-up)
-        mobility_interval = 1.0
+        mobility_interval = self.config.network.mobility_update_interval_seconds
         t = mobility_interval
         while t <= total_duration:
             self._schedule_event(
@@ -497,7 +485,7 @@ class SimulationEngine:
             t += mobility_interval
 
         # Schedule node encounter checks throughout ENTIRE simulation
-        encounter_interval = 10.0
+        encounter_interval = self.config.network.encounter_check_interval_seconds
         t = encounter_interval
         while t <= total_duration:
             self._schedule_event(
@@ -654,7 +642,7 @@ class SimulationEngine:
             all_coordination_nodes=coord_nodes,
         )
 
-        # Track coordination cycles for System Availability (Karaman et al., 2026)
+        # Track coordination cycles for System Availability
         results.total_coordination_cycles += 1
         if len(assignments) > 0:
             results.active_coordination_cycles += 1
@@ -717,7 +705,7 @@ class SimulationEngine:
         """
         Determine if a communication link exists between two nodes.
 
-        Models infrastructure damage (Karaman et al., 2026) where some links
+        Models infrastructure damage where some links
         are unavailable due to base station failures.  Uses CRC32 for a
         deterministic, process-stable hash so that:
 
@@ -780,7 +768,7 @@ class SimulationEngine:
         
         # Step 4: Process new encounters for PRoPHET (connection-up only)
         # Apply connectivity filter: infrastructure damage means some links
-        # don't exist (Karaman et al., 2026)
+        # don't exist
         for node_a, node_b in new_connections:
             if not self._is_link_available(node_a, node_b):
                 continue
@@ -813,14 +801,14 @@ class SimulationEngine:
         """
         Handle node encounter events — connection-up only for PRoPHET.
 
-        RFC 6693 (Lindgren et al., 2012): PRoPHET encounter updates (the
+        RFC 6693: PRoPHET encounter updates (the
         P(a,b) equation and transitivity) fire only when a link is first
         established ("connection-up"), not repeatedly while nodes remain
         in range.  Message transfers still occur on all active links at
         each interval.
 
         Uses the deterministic link availability filter — infrastructure
-        damage (Karaman et al., 2026) determines which links exist.
+        damage determines which links exist.
         """
         # Build the current set of link-available edges
         current_links: set[tuple[str, str]] = set()
@@ -935,9 +923,6 @@ class ExperimentRunner:
 
     If the file is not found, the runner falls back to sequential seeds
     (``base_seed + run_number``).
-
-    Sources:
-        - Law (2015): 30 runs per configuration for statistical significance
 
     Attributes:
         config: Simulation configuration

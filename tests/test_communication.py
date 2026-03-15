@@ -2,20 +2,16 @@
 Tests for Communication Layer (Phase 2) — PRoPHETv2.
 
 These tests verify that the PRoPHETv2 communication layer correctly
-implements the specifications from Grasic et al. (2011):
+implements the specification:
 - Time-based encounter updates (P_enc depends on inter-encounter interval)
 - MAX-based transitivity (prevents saturation)
 - Greater-or-equal forwarding condition
 - Parameter defaults: P_enc_max=0.5, I_typ=1800, β=0.9, γ=0.999885791
 
-Additional parameters from Ullah & Qayyum (2022):
+Additional parameters:
 - Message TTL: 300 minutes (18000 seconds)
 - Transmit speed: 2 Mbps
 - Buffer drop policy: drop oldest
-
-Sources verified:
-    - Grasic et al. (2011): PRoPHETv2 parameters
-    - Ullah & Qayyum (2022): Message handling parameters
 """
 
 import pytest
@@ -512,7 +508,7 @@ class TestDeliveryPredictabilityMatrix:
     def test_matrix_creation_with_prophetv2_params(
         self, matrix: DeliveryPredictabilityMatrix
     ):
-        """Test matrix creation with PRoPHETv2 parameters (Grasic et al., 2011)."""
+        """Test matrix creation with PRoPHETv2 parameters."""
         assert matrix.p_enc_max == P_ENC_MAX
         assert matrix.i_typ == I_TYP
         assert matrix.beta == BETA
@@ -1077,32 +1073,32 @@ class TestPRoPHETv2Parameters:
     """Verify PRoPHETv2 parameters match specification."""
 
     def test_prophet_p_enc_max(self):
-        """Verify P_enc_max = 0.5 (Grasic et al., 2011)."""
+        """Verify P_enc_max = 0.5."""
         params = PRoPHETParameters()
         assert params.p_enc_max == P_ENC_MAX
 
     def test_prophet_i_typ(self):
-        """Verify I_typ = 1800.0 (Grasic et al., 2011)."""
+        """Verify I_typ = 1800.0."""
         params = PRoPHETParameters()
         assert params.i_typ == I_TYP
 
     def test_prophet_beta(self):
-        """Verify β = 0.9 (Grasic et al., 2011)."""
+        """Verify β = 0.9."""
         params = PRoPHETParameters()
         assert params.beta == BETA
 
     def test_prophet_gamma(self):
-        """Verify γ = 0.999885791 (Grasic et al., 2011)."""
+        """Verify γ = 0.999885791."""
         params = PRoPHETParameters()
         assert params.gamma == GAMMA
 
     def test_message_ttl(self):
-        """Verify message TTL = 300 minutes (Ullah & Qayyum, 2022)."""
+        """Verify message TTL = 300 minutes."""
         params = CommunicationParameters()
         assert params.message_ttl_seconds == MESSAGE_TTL_S
 
     def test_transmit_speed(self):
-        """Verify transmit speed = 2 Mbps (Ullah & Qayyum, 2022)."""
+        """Verify transmit speed = 2 Mbps."""
         params = CommunicationParameters()
         assert params.transmit_speed_bps == TRANSMIT_SPEED_BPS
 
@@ -1112,7 +1108,7 @@ class TestPRoPHETv2Parameters:
         assert params.update_interval_seconds == AGING_INTERVAL_S
 
     def test_buffer_drop_policy(self):
-        """Verify buffer drop policy = drop_oldest (Ullah & Qayyum, 2022)."""
+        """Verify buffer drop policy = drop_oldest."""
         params = CommunicationParameters()
         assert params.buffer_drop_policy == BufferDropPolicy.DROP_OLDEST
 

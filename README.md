@@ -194,7 +194,7 @@ python scripts/diagnose_encounters.py --connectivity 0.20
 | Message rate | 2 msgs/min | Kumar et al. (2023) |
 | Urgency distribution | 20% High, 50% Medium, 30% Low | Li et al. (2025) |
 | Simulation duration | 6000 s (~100 min) | Ullah & Qayyum (2022) |
-| Warm-up period | 0 s (cold-start) | Grassmann (2008) |
+| Warm-up period | 0 s (cold-start, configurable) | Grassmann (2008) |
 
 ### Coordination
 
@@ -240,14 +240,16 @@ Statistical analysis includes Welch's independent t-tests, one-way ANOVA, Cohen'
 ## Testing
 
 ```bash
-pytest                    # Run all 384 tests
+pytest                    # Run all 411 tests
 pytest --cov=ercs         # With coverage
 pytest -m "not slow"      # Skip slow tests
 ```
 
 ## Documentation
 
-See [`docs/GUIDE.md`](docs/GUIDE.md) for the complete architecture guide, event cascade details, PRoPHETv2 equations, and visualization reference.
+- [`docs/GUIDE.md`](docs/GUIDE.md) — Complete architecture guide, event cascade details, PRoPHETv2 equations, and visualisation reference.
+- [`docs/Appendix_D_Technical_Reference_v1.md`](docs/Appendix_D_Technical_Reference_v1.md) — Formal technical reference appendix with all parameters, equations, algorithm pseudocode, and statistical framework.
+- [`configs/default.yaml`](configs/default.yaml) — Single source of truth for all runtime parameters (mirrored in Pydantic defaults).
 
 ## Academic Context
 

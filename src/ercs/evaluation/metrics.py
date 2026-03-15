@@ -11,9 +11,6 @@ Implements:
 - Effect size calculations (Cohen's d)
 - Results export and visualization support
 
-Sources:
-    - Law (2015): Statistical design, 30 runs for CLT
-    - Design document: Three core metrics (delivery rate, response time, availability)
 """
 
 from collections.abc import Callable
@@ -317,8 +314,6 @@ class StatisticalAnalyzer:
     - One-way ANOVA
     - Effect size calculations
 
-    Sources:
-        - Law (2015): Statistical methodology for simulation
     """
 
     def __init__(self, alpha: float = 0.05):
@@ -716,7 +711,7 @@ class PerformanceEvaluator:
         """Aggregate System Availability across runs.
 
         Formula: Active Coordination Cycles / Total Coordination Cycles × 100%
-        Source: Karaman et al. (2026); SpecDesign Section 1.4.10
+        SpecDesign Section 1.4.10.
         """
         availabilities = [
             r.system_availability
@@ -730,8 +725,7 @@ class PerformanceEvaluator:
     ) -> dict[str, DescriptiveStats]:
         """Delivery rate stratified by urgency level (H/M/L).
 
-        Source: Oksuz & Satoglu (2024); Rosas et al. (2023);
-        SpecDesign Section 1.4.10
+        SpecDesign Section 1.4.10.
         """
         urgency_levels = ["H", "M", "L"]
         per_urgency_rates: dict[str, list[float]] = {u: [] for u in urgency_levels}

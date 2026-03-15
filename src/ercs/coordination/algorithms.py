@@ -18,15 +18,6 @@ Key differences between algorithms:
 - Baseline: assigns to nearest responder regardless of connectivity
 - Baseline: processes tasks in creation order (FCFS)
 
-Sources:
-    - Boondirek et al. (2014): Distance-dominant weighting (DiPRoPHET)
-    - Cui et al. (2022): Workload-aware scoring (AdaptiveSpray)
-    - Kaji et al. (2025): Distributed architecture, 30-minute update interval
-    - Rosas et al. (2023): Three priority levels
-    - Ullah & Qayyum (2022): P > threshold for path availability
-    - Keykhaei et al. (2024): Euclidean distance for proximity
-    - Oksuz & Satoglu (2024): Urgency-based prioritisation
-    - Cabral et al. (2018): 30-minute response time standard
 """
 
 from abc import ABC, abstractmethod
@@ -42,24 +33,6 @@ from ercs.config.parameters import (
     UrgencyLevel,
 )
 from ercs.scenario.generator import Task
-
-# Static scoring weights for the adaptive algorithm.
-# Source: Boondirek et al. (2014) DiPRoPHET (ICUIMC) — distance as dominant criterion.
-# Recency weight added to break P-value saturation ties (Nelson et al., 2009).
-PREDICTABILITY_WEIGHT = 0.2  # α
-RECENCY_WEIGHT = 0.2  # γ_r (encounter recency)
-PROXIMITY_WEIGHT = 0.6  # β
-
-# Workload penalty weight — discourages re-assigning the same responder
-# across consecutive coordination cycles, preventing node overload.
-# Source: Cui et al. (2022) AdaptiveSpray (China Communications)
-WORKLOAD_PENALTY_WEIGHT = 0.2  # λ
-
-# Fixed denominator for distance normalisation — the simulation area diagonal
-# sqrt(3000² + 1500²) ≈ 3354.1 m.  Using a fixed denominator avoids the
-# relative normalisation problem where D_norm = 1.0 for the closest candidate
-# even when all candidates are far from the task.
-SIMULATION_AREA_DIAGONAL_M = 3354.1
 
 
 class NetworkStateProvider(Protocol):
@@ -164,6 +137,7 @@ class CoordinatorBase(ABC):
         self,
         params: CoordinationParameters | None = None,
         algorithm_type: AlgorithmType = AlgorithmType.BASELINE,
+        area_diagonal_m: float | None = None,
     ):
         """
         Initialize the coordinator.
@@ -171,9 +145,18 @@ class CoordinatorBase(ABC):
         Args:
             params: Coordination parameters (uses defaults if None)
             algorithm_type: Algorithm type identifier
+            area_diagonal_m: Simulation area diagonal for distance normalisation.
+                If None, computed from default 3000×1500 area.
         """
         self.params = params or CoordinationParameters()
         self.algorithm_type = algorithm_type
+
+        # Compute default diagonal from standard area if not provided
+        if area_diagonal_m is not None:
+            self.area_diagonal_m = area_diagonal_m
+        else:
+            import math
+            self.area_diagonal_m = math.sqrt(3000.0**2 + 1500.0**2)
 
         # Event log
         self._events: list[CoordinationEvent] = []
@@ -250,8 +233,6 @@ class CoordinatorBase(ABC):
     ) -> float:
         """
         Calculate Euclidean distance between two points.
-
-        Source: Keykhaei et al. (2024) - standard practice for simulation
 
         Args:
             x1, y1: First point coordinates
@@ -350,28 +331,27 @@ class AdaptiveCoordinator(CoordinatorBase):
     coordination cycle, a hard cap would create artificial scarcity, blocking
     the best candidate after a single assignment.  The soft penalty discourages
     re-assignment proportionally without preventing it when the best candidate
-    is clearly superior.  This follows Deng et al. (2016, IEEE TMC,
-    "Task Assignment in Mobile Crowdsourcing") and Boondirek et al. (2014)
-    who use score-based selection without hard capacity constraints.
+    is clearly superior.
 
     Encounter recency addresses P-value saturation: under Random Waypoint
     mobility, PRoPHET P values converge to near-uniform ~0.45–0.50 for all
-    encountered responders (Boondirek et al., 2014; Nelson et al., 2009).
+    encountered responders.
     The recency signal discriminates between recently-contacted nodes
     (high confidence in current position/state) and stale contacts.
 
-    Sources:
-        - Boondirek et al. (2014): Distance-dominant weighting (DiPRoPHET)
-        - Nelson et al. (2009): Encounter-based routing, recency as signal
-        - Shah & Ahmed (2025): Absolute DP values (SN Computer Science)
-        - Deng et al. (2016): Soft workload balancing (IEEE TMC)
-        - Kaji et al. (2025): Urgency-first prioritisation, 30-min interval
-        - Ullah & Qayyum (2022): P > threshold, predictability-based selection
     """
 
-    def __init__(self, params: CoordinationParameters | None = None):
+    def __init__(
+        self,
+        params: CoordinationParameters | None = None,
+        area_diagonal_m: float | None = None,
+    ):
         """Initialize the adaptive coordinator."""
-        super().__init__(params=params, algorithm_type=AlgorithmType.ADAPTIVE)
+        super().__init__(
+            params=params,
+            algorithm_type=AlgorithmType.ADAPTIVE,
+            area_diagonal_m=area_diagonal_m,
+        )
 
         # Urgency ordering for task prioritisation
         self._urgency_order = {
@@ -455,14 +435,14 @@ class AdaptiveCoordinator(CoordinatorBase):
                 assignments.append(assignment)
 
                 # Compute recency for this assignment (for logging)
-                T_REF = 1800.0
+                t_ref = self.params.recency_reference_seconds
                 coord_nodes_to_query = all_coordination_nodes or [coordination_node]
                 last_enc = max(
                     network_state.get_last_encounter_time(cn, responder_id)
                     for cn in coord_nodes_to_query
                 )
                 delta_t = max(0.0, current_time - last_enc)
-                recency = 1.0 - min(delta_t / T_REF, 1.0)
+                recency = 1.0 - min(delta_t / t_ref, 1.0)
 
                 # Log event
                 self._log_event(
@@ -508,18 +488,12 @@ class AdaptiveCoordinator(CoordinatorBase):
         where R_norm = 1 − min(Δt / T_REF, 1.0) and T_REF = 1800 s (i_typ).
         W_inter = 1.0 if responder was assigned in a previous cycle, else 0.0.
         Workload balancing uses a soft penalty (W_inter) rather than hard
-        capacity exclusion, following Deng et al. (2016, IEEE TMC) — score-based
-        selection with proportional penalty is more appropriate than b-matching
-        when the responder pool is large relative to per-cycle task count.
+        capacity exclusion — score-based selection with proportional penalty
+        is more appropriate than b-matching when the responder pool is large
+        relative to per-cycle task count.
 
         When multiple coordination nodes are available, uses max P and most
         recent encounter across all coord nodes to avoid single-node isolation.
-
-        Sources:
-            Shah & Ahmed (2025) — absolute DP values
-            Boondirek et al. (2014) — distance-dominant weighting
-            Deng et al. (2016) — soft workload balancing in mobile crowdsourcing
-            Nelson et al. (2009) — encounter recency as routing signal
 
         Args:
             task: Task to assign
@@ -538,9 +512,7 @@ class AdaptiveCoordinator(CoordinatorBase):
 
         responders = responder_locator.get_all_responder_ids()
         threshold = self.params.available_path_threshold
-
-        # T_REF matches PRoPHET i_typ parameter (seconds) — inter-encounter half-life
-        T_REF = 1800.0
+        t_ref = self.params.recency_reference_seconds
 
         # Use all coord nodes for P queries to avoid single-node isolation
         coord_nodes_to_query = all_coordination_nodes or [coordination_node]
@@ -573,7 +545,7 @@ class AdaptiveCoordinator(CoordinatorBase):
                 for cn in coord_nodes_to_query
             )
             delta_t = max(0.0, current_time - last_enc)
-            r_norm = 1.0 - min(delta_t / T_REF, 1.0)
+            r_norm = 1.0 - min(delta_t / t_ref, 1.0)
 
             candidates.append({
                 "id": responder_id,
@@ -606,7 +578,7 @@ class AdaptiveCoordinator(CoordinatorBase):
             r_norm = candidate["recency"]
 
             # Normalise distance against fixed simulation diagonal
-            d_norm = 1.0 - (candidate["distance"] / SIMULATION_AREA_DIAGONAL_M)
+            d_norm = 1.0 - (candidate["distance"] / self.area_diagonal_m)
 
             # Score = α×P_abs + γ_r×R_norm + β×D_norm − λ×W_inter
             w_inter = 1.0 if candidate["id"] in self._responder_assignments else 0.0
@@ -614,7 +586,7 @@ class AdaptiveCoordinator(CoordinatorBase):
                 alpha * p_abs
                 + gamma_r * r_norm
                 + beta * d_norm
-                - WORKLOAD_PENALTY_WEIGHT * w_inter
+                - self.params.workload_penalty_weight * w_inter
             )
 
             if score > best_score:
@@ -639,14 +611,19 @@ class BaselineCoordinator(CoordinatorBase):
     without network awareness, serving as the control condition for
     evaluating the adaptive algorithm.
 
-    Sources:
-        - Design decision: FCFS as standard baseline approach
-        - Keykhaei et al. (2024): Euclidean distance
     """
 
-    def __init__(self, params: CoordinationParameters | None = None):
+    def __init__(
+        self,
+        params: CoordinationParameters | None = None,
+        area_diagonal_m: float | None = None,
+    ):
         """Initialize the baseline coordinator."""
-        super().__init__(params=params, algorithm_type=AlgorithmType.BASELINE)
+        super().__init__(
+            params=params,
+            algorithm_type=AlgorithmType.BASELINE,
+            area_diagonal_m=area_diagonal_m,
+        )
 
     def assign_tasks(
         self,
@@ -796,9 +773,6 @@ class CoordinationManager:
     - Integration with communication layer for message sending
     - Performance tracking across the simulation
 
-    Sources:
-        - Kaji et al. (2025): 30-minute update interval
-        - Cabral et al. (2018): Response time standards
     """
 
     def __init__(
@@ -927,6 +901,7 @@ class CoordinationManager:
 def create_coordinator(
     algorithm_type: AlgorithmType | str,
     params: CoordinationParameters | None = None,
+    area_diagonal_m: float | None = None,
 ) -> CoordinatorBase:
     """
     Factory function to create a coordinator.
@@ -934,6 +909,7 @@ def create_coordinator(
     Args:
         algorithm_type: Type of algorithm ("adaptive" or "baseline")
         params: Coordination parameters
+        area_diagonal_m: Simulation area diagonal for distance normalisation
 
     Returns:
         Appropriate coordinator instance
@@ -946,6 +922,6 @@ def create_coordinator(
         algorithm_type = AlgorithmType(algorithm_type)
 
     if algorithm_type == AlgorithmType.ADAPTIVE:
-        return AdaptiveCoordinator(params)
+        return AdaptiveCoordinator(params, area_diagonal_m=area_diagonal_m)
     else:
-        return BaselineCoordinator(params)
+        return BaselineCoordinator(params, area_diagonal_m=area_diagonal_m)

@@ -9,9 +9,6 @@ the specifications from the Phase 1 documentation:
 - Connectivity scenarios: 75%, 40%, 20%
 - Random Waypoint mobility preparation
 
-Sources verified:
-    - Ullah & Qayyum (2022): Network parameters
-    - Karaman et al. (2026): Connectivity levels
 """
 
 import numpy as np
@@ -230,7 +227,6 @@ class TestConnectivityScenarios:
     simulation engine's ``_is_link_available()`` (CRC32-based, deterministic).
     The topology itself always contains all range-based edges.
 
-    Source: Karaman et al. (2026) — infrastructure damage scenarios.
     """
 
     @pytest.fixture

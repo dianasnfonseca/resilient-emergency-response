@@ -17,10 +17,6 @@ Enums:
     MessageType: Classification of messages
     MessageStatus: Status of message delivery
 
-Sources:
-    - Kumar et al. (2023): PRoPHET protocol parameters
-    - Ullah & Qayyum (2022): Message handling parameters
-    - Castillo et al. (2024): Protocol selection rationale
 """
 
 from ercs.communication.prophet import (

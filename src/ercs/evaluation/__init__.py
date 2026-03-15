@@ -20,9 +20,6 @@ Enums:
 Factory Functions:
     evaluate_results: Convenience function for evaluation
 
-Sources:
-    - Law (2015): Statistical methodology
-    - Design document: Core metrics specification
 """
 
 from ercs.evaluation.metrics import (

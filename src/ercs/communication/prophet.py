@@ -4,7 +4,7 @@ PRoPHETv2 Communication Layer (Phase 2).
 This module implements store-and-forward message delivery with PRoPHETv2
 forwarding logic for delay-tolerant networking in emergency coordination.
 
-PRoPHETv2 (Grasic et al., 2011) extends the original PRoPHET protocol with:
+PRoPHETv2 extends the original PRoPHET protocol with:
 - Time-based encounter updates (P_enc depends on inter-encounter interval)
 - MAX-based transitivity (prevents delivery predictability saturation)
 - Greater-or-equal forwarding condition
@@ -15,11 +15,6 @@ Key equations:
     P(a,b) = P(a,b)_old × γ^k                          [aging, k = time units]
     P(a,c) = max(P(a,c)_old, P(a,b) × P(b,c) × β)     [MAX transitivity]
 
-Sources:
-    - Grasic et al. (2011): PRoPHETv2 specification (CHANTS '11)
-    - Lindgren et al. (2012): RFC 6693
-    - Ullah & Qayyum (2022): Message TTL (300 min), transmit speed (2 Mbps), drop-oldest
-    - Castillo et al. (2024): PRoPHET selection rationale
 """
 
 import uuid
@@ -178,7 +173,7 @@ class MessageBuffer:
     Message buffer for a DTN node implementing store-and-forward.
 
     Manages message storage with capacity limits and drop policies.
-    Implements drop-oldest policy when buffer is full (Ullah & Qayyum, 2022).
+    Implements drop-oldest policy when buffer is full.
 
     Attributes:
         node_id: ID of the node owning this buffer
@@ -356,7 +351,7 @@ class DeliveryPredictabilityMatrix:
     Each node maintains P(a,b) values representing the probability that
     node 'a' can successfully deliver a message to destination 'b'.
 
-    PRoPHETv2 (Grasic et al., 2011) differs from original PRoPHET:
+    PRoPHETv2 differs from original PRoPHET:
     1. Time-based encounter: P_enc depends on inter-encounter interval
     2. MAX-based transitivity: prevents saturation to ~1.0
     3. Greater-or-equal forwarding condition
@@ -365,10 +360,6 @@ class DeliveryPredictabilityMatrix:
     1. On encounter: P increases (time-scaled P_enc)
     2. Aging: P decays over time when no encounters
     3. Transitivity: MAX(P_old, P(a,b) × P(b,c) × β)
-
-    Sources:
-        - Grasic et al. (2011): PRoPHETv2 (P_enc_max=0.5, β=0.9, γ=0.999885791)
-        - Lindgren et al. (2012): RFC 6693
 
     Attributes:
         p_enc_max: Maximum encounter probability
@@ -385,6 +376,7 @@ class DeliveryPredictabilityMatrix:
         beta: float = 0.9,
         gamma: float = 0.999885791,
         update_interval: float = 30.0,
+        min_predictability_threshold: float = 0.001,
     ):
         """
         Initialise the predictability matrix with PRoPHETv2 parameters.
@@ -395,6 +387,7 @@ class DeliveryPredictabilityMatrix:
             beta: Transitivity scaling constant (default: 0.9)
             gamma: Aging constant (default: 0.999885791)
             update_interval: Time units for aging (default: 30.0)
+            min_predictability_threshold: Prune P values below this (default: 0.001)
         """
         if not (0 < p_enc_max <= 1):
             raise ValueError(f"p_enc_max must be in (0, 1], got {p_enc_max}")
@@ -412,6 +405,7 @@ class DeliveryPredictabilityMatrix:
         self.beta = beta
         self.gamma = gamma
         self.update_interval = update_interval
+        self.min_predictability_threshold = min_predictability_threshold
 
         # Matrix storage: {node_id: {destination_id: predictability}}
         self._matrix: dict[str, dict[str, float]] = {}
@@ -447,8 +441,6 @@ class DeliveryPredictabilityMatrix:
         If this is the first encounter, P_enc = P_enc_max.
         If time since last encounter < I_typ, P_enc is scaled down.
         Otherwise, P_enc = P_enc_max.
-
-        Source: Grasic et al. (2011), Section 3.1
 
         Args:
             node_a: First node in encounter
@@ -486,8 +478,6 @@ class DeliveryPredictabilityMatrix:
         This is applied symmetrically: both nodes update their predictability
         to each other.
 
-        Source: Grasic et al. (2011), Section 3.1
-
         Args:
             node_a: First node in encounter
             node_b: Second node in encounter
@@ -517,8 +507,6 @@ class DeliveryPredictabilityMatrix:
 
         This prevents the delivery predictability saturation problem where
         all P values converge to ~1.0 under original PRoPHET.
-
-        Source: Grasic et al. (2011), Section 3.2
 
         This is applied symmetrically for both nodes.
 
@@ -587,7 +575,7 @@ class DeliveryPredictabilityMatrix:
             new_p = old_p * aging_factor
 
             # Remove very small predictabilities to save memory
-            if new_p < 0.001:
+            if new_p < self.min_predictability_threshold:
                 del self._matrix[node_id][dest]
             else:
                 self._matrix[node_id][dest] = new_p
@@ -691,9 +679,6 @@ class CommunicationLayer:
     - Forwarding decisions based on PRoPHETv2 logic (>= condition)
     - Buffer management with drop-oldest policy
 
-    Sources:
-        - Grasic et al. (2011): PRoPHETv2 parameters
-        - Ullah & Qayyum (2022): Message handling, buffer policy
     """
 
     def __init__(
@@ -720,6 +705,7 @@ class CommunicationLayer:
             beta=comm_params.prophet.beta,
             gamma=comm_params.prophet.gamma,
             update_interval=comm_params.update_interval_seconds,
+            min_predictability_threshold=comm_params.min_predictability_threshold,
         )
 
         # Create message buffer for each node
@@ -976,7 +962,7 @@ class CommunicationLayer:
         and exchanges messages.  Use this for sustained contacts where the
         connection-up event has already been processed.
 
-        RFC 6693 (Lindgren et al., 2012): encounter updates happen at
+        RFC 6693: encounter updates happen at
         contact establishment, not continuously during sustained contact.
 
         Args:

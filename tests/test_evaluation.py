@@ -460,7 +460,7 @@ class TestEvaluateResults:
 
 
 class TestSystemAvailability:
-    """Tests for System Availability metric (Karaman et al., 2026)."""
+    """Tests for System Availability metric."""
 
     def test_system_availability_full(self):
         """All cycles active → 100%."""

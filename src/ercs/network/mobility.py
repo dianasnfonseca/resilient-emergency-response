@@ -25,12 +25,6 @@ Role definitions:
   - LIAISON (~15%): free movement across entire area, medium speed
     (1-10 m/s), brief pauses — variable encounter patterns.
 
-Sources:
-    - Ullah & Qayyum (2022): Random Waypoint model, speed range 0-20 m/s
-    - Aschenbruck et al. (2009): Disaster Area mobility model
-    - Uddin et al. (2011): Post-Disaster Mobility Model
-    - Stute et al. (2017): Natural Disaster Mobility Model
-    - Keykhaei et al. (2024): Multi-agent mobility in emergency evacuation
 """
 
 from __future__ import annotations
@@ -91,36 +85,40 @@ class RoleConfig:
     zone_mode: str  # "incident" | "shuttle" | "full"
 
 
-ROLE_CONFIGS: dict[ResponderRole, RoleConfig] = {
-    ResponderRole.RESCUE: RoleConfig(
-        speed_min=1.0,
-        speed_max=5.0,
-        pause_min=10.0,
-        pause_max=60.0,
-        zone_mode="incident",
-    ),
-    ResponderRole.TRANSPORT: RoleConfig(
-        speed_min=5.0,
-        speed_max=20.0,
-        pause_min=30.0,
-        pause_max=120.0,
-        zone_mode="shuttle",
-    ),
-    ResponderRole.LIAISON: RoleConfig(
-        speed_min=1.0,
-        speed_max=10.0,
-        pause_min=0.0,
-        pause_max=30.0,
-        zone_mode="full",
-    ),
-}
+def _build_role_configs(params: NetworkParameters) -> dict[ResponderRole, RoleConfig]:
+    """Build role configs from NetworkParameters (single source of truth)."""
+    return {
+        ResponderRole.RESCUE: RoleConfig(
+            speed_min=params.role_rescue_speed_min,
+            speed_max=params.role_rescue_speed_max,
+            pause_min=params.role_rescue_pause_min,
+            pause_max=params.role_rescue_pause_max,
+            zone_mode="incident",
+        ),
+        ResponderRole.TRANSPORT: RoleConfig(
+            speed_min=params.role_transport_speed_min,
+            speed_max=params.role_transport_speed_max,
+            pause_min=params.role_transport_pause_min,
+            pause_max=params.role_transport_pause_max,
+            zone_mode="shuttle",
+        ),
+        ResponderRole.LIAISON: RoleConfig(
+            speed_min=params.role_liaison_speed_min,
+            speed_max=params.role_liaison_speed_max,
+            pause_min=params.role_liaison_pause_min,
+            pause_max=params.role_liaison_pause_max,
+            zone_mode="full",
+        ),
+    }
 
-# Role distribution (fraction of total mobile nodes)
-ROLE_DISTRIBUTION: dict[ResponderRole, float] = {
-    ResponderRole.RESCUE: 0.60,
-    ResponderRole.TRANSPORT: 0.25,
-    ResponderRole.LIAISON: 0.15,
-}
+
+def _build_role_distribution(params: NetworkParameters) -> dict[ResponderRole, float]:
+    """Build role distribution from NetworkParameters (single source of truth)."""
+    return {
+        ResponderRole.RESCUE: params.role_rescue_fraction,
+        ResponderRole.TRANSPORT: params.role_transport_fraction,
+        ResponderRole.LIAISON: 1.0 - params.role_rescue_fraction - params.role_transport_fraction,
+    }
 
 
 @dataclass
@@ -178,10 +176,6 @@ class MobilityManager:
     mobile responders to transit between incident and coordination zones,
     creating encounter opportunities essential for DTN message relay.
     
-    Sources:
-        - Ullah & Qayyum (2022): Speed range 0-20 m/s
-        - Chapter1_v2: Operating zone rationale
-    
     Attributes:
         parameters: Network configuration
         speed_min: Minimum movement speed (m/s)
@@ -192,7 +186,7 @@ class MobilityManager:
     
     parameters: NetworkParameters
     speed_min: float = 0.0
-    speed_max: float = 20.0  # Source: Ullah & Qayyum (2022)
+    speed_max: float = 20.0
     pause_min: float = 0.0
     pause_max: float = 30.0  # Brief pauses for realism
     
@@ -201,9 +195,11 @@ class MobilityManager:
     _rng: np.random.Generator = field(default=None)
     
     def __post_init__(self) -> None:
-        """Initialize random generator."""
+        """Initialize random generator and role configs from parameters."""
         if self._rng is None:
             self._rng = np.random.default_rng()
+        self._role_configs = _build_role_configs(self.parameters)
+        self._role_distribution = _build_role_distribution(self.parameters)
     
     def initialize(
         self,
@@ -226,7 +222,7 @@ class MobilityManager:
         self._node_states.clear()
 
         # Deterministic role assignment by index
-        roles = _assign_roles(len(mobile_node_ids))
+        roles = _assign_roles(len(mobile_node_ids), self._role_distribution)
 
         for idx, node_id in enumerate(mobile_node_ids):
             if node_id in initial_positions:
@@ -320,7 +316,7 @@ class MobilityManager:
     
     def _assign_new_waypoint(self, state: MobileNodeState) -> None:
         """Assign a new random waypoint, respecting the node's role."""
-        role_cfg = ROLE_CONFIGS.get(state.role) if state.role is not None else None
+        role_cfg = self._role_configs.get(state.role) if state.role is not None else None
 
         if role_cfg is None:
             # Fallback: original RWP behaviour (full area, manager speeds)
@@ -388,7 +384,10 @@ class MobilityManager:
         return list(self._node_states.keys())
 
 
-def _assign_roles(n_nodes: int) -> list[ResponderRole]:
+def _assign_roles(
+    n_nodes: int,
+    role_distribution: dict[ResponderRole, float] | None = None,
+) -> list[ResponderRole]:
     """Assign responder roles deterministically by index.
 
     Distribution (approximate):
@@ -398,12 +397,16 @@ def _assign_roles(n_nodes: int) -> list[ResponderRole]:
 
     Args:
         n_nodes: Total number of mobile nodes.
+        role_distribution: Fraction per role. Uses default NetworkParameters
+            values if None.
 
     Returns:
         List of roles, one per node index.
     """
-    n_rescue = round(n_nodes * ROLE_DISTRIBUTION[ResponderRole.RESCUE])
-    n_transport = round(n_nodes * ROLE_DISTRIBUTION[ResponderRole.TRANSPORT])
+    if role_distribution is None:
+        role_distribution = _build_role_distribution(NetworkParameters())
+    n_rescue = round(n_nodes * role_distribution[ResponderRole.RESCUE])
+    n_transport = round(n_nodes * role_distribution[ResponderRole.TRANSPORT])
     # Remainder goes to LIAISON
     n_liaison = n_nodes - n_rescue - n_transport
 
