@@ -35,6 +35,12 @@ htmlcov/
 *.swo
 *~
 
+# Claude Code
+.claude/
+
+# Jupyter
+.ipynb_checkpoints/
+
 # OS
 .DS_Store
 Thumbs.db
