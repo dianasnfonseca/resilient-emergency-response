@@ -10,11 +10,15 @@ Groups:
 """
 
 import pytest
+from conftest import PATH_THRESHOLD
 
-from ercs.config.parameters import CoordinationParameters, SimulationConfig, UrgencyLevel
+from ercs.config.parameters import (
+    CoordinationParameters,
+    SimulationConfig,
+    UrgencyLevel,
+)
 from ercs.coordination.algorithms import AdaptiveCoordinator
 from ercs.scenario.generator import Task
-from conftest import PATH_THRESHOLD
 
 # Derive constants from config (single source of truth)
 _CONFIG = SimulationConfig()
@@ -87,29 +91,29 @@ class TestConstants:
 
     def test_predictability_weight(self):
         """α = 0.2."""
-        assert PREDICTABILITY_WEIGHT == pytest.approx(0.2)
+        assert pytest.approx(0.2) == PREDICTABILITY_WEIGHT
 
     def test_recency_weight(self):
         """γ_r = 0.2."""
-        assert RECENCY_WEIGHT == pytest.approx(0.2)
+        assert pytest.approx(0.2) == RECENCY_WEIGHT
 
     def test_proximity_weight(self):
         """β = 0.6."""
-        assert PROXIMITY_WEIGHT == pytest.approx(0.6)
+        assert pytest.approx(0.6) == PROXIMITY_WEIGHT
 
     def test_workload_penalty_weight(self):
         """λ = 0.2."""
-        assert WORKLOAD_PENALTY_WEIGHT == pytest.approx(0.2)
+        assert pytest.approx(0.2) == WORKLOAD_PENALTY_WEIGHT
 
     def test_simulation_area_diagonal(self):
         """sqrt(3000² + 1500²) ≈ 3354.1 m."""
-        assert SIMULATION_AREA_DIAGONAL_M == pytest.approx(3354.1, abs=0.1)
+        assert pytest.approx(3354.1, abs=0.1) == SIMULATION_AREA_DIAGONAL_M
 
     def test_default_path_threshold(self):
         """Default threshold = 0.3."""
         params = CoordinationParameters()
         assert params.available_path_threshold == pytest.approx(0.3)
-        assert PATH_THRESHOLD == pytest.approx(0.3)
+        assert pytest.approx(0.3) == PATH_THRESHOLD
 
 
 # ============================================================================
@@ -145,16 +149,18 @@ class TestBug1AbsoluteNormalisation:
         locator = MockResponderLocator(positions)
 
         # r_7 has highest P (~0.45), others above threshold (0.32–0.38)
-        net = MockNetworkState({
-            ("coord_0", "r_0"): 0.35,
-            ("coord_0", "r_1"): 0.36,
-            ("coord_0", "r_2"): 0.34,
-            ("coord_0", "r_3"): 0.32,
-            ("coord_0", "r_4"): 0.38,
-            ("coord_0", "r_5"): 0.37,
-            ("coord_0", "r_6"): 0.33,
-            ("coord_0", "r_7"): 0.45,
-        })
+        net = MockNetworkState(
+            {
+                ("coord_0", "r_0"): 0.35,
+                ("coord_0", "r_1"): 0.36,
+                ("coord_0", "r_2"): 0.34,
+                ("coord_0", "r_3"): 0.32,
+                ("coord_0", "r_4"): 0.38,
+                ("coord_0", "r_5"): 0.37,
+                ("coord_0", "r_6"): 0.33,
+                ("coord_0", "r_7"): 0.45,
+            }
+        )
 
         # 10 tasks spread across the incident zone, most far from r_7
         tasks = [
@@ -267,16 +273,16 @@ class TestBug1AbsoluteNormalisation:
         assert assigned_ids <= eligible_ids
 
         # 4. Multiple distinct responders used (workload penalty distributes)
-        assert len(assigned_ids) >= 5, (
-            f"Expected >= 5 unique eligible responders, got {len(assigned_ids)}"
-        )
+        assert (
+            len(assigned_ids) >= 5
+        ), f"Expected >= 5 unique eligible responders, got {len(assigned_ids)}"
 
         # 5. Not ALL 24 eligible responders used — proximity should concentrate
         #    assignments toward responders near the incident zone, not scatter
         #    across the whole area
-        assert len(assigned_ids) < 24, (
-            f"All 24 eligible responders used — proximity scoring has no effect"
-        )
+        assert (
+            len(assigned_ids) < 24
+        ), "All 24 eligible responders used — proximity scoring has no effect"
 
 
 # ============================================================================
@@ -296,21 +302,21 @@ class TestBug2ThresholdFiltering:
         """Near responder with P=0.15 is excluded; farther P=0.40 is selected."""
         positions = {
             "r_near": (110.0, 110.0),  # Very close to task at (100, 100)
-            "r_far": (500.0, 500.0),   # Far from task
+            "r_far": (500.0, 500.0),  # Far from task
         }
         locator = MockResponderLocator(positions)
 
-        net = MockNetworkState({
-            ("coord_0", "r_near"): 0.15,  # Below 0.3 threshold
-            ("coord_0", "r_far"): 0.40,   # Above threshold
-        })
+        net = MockNetworkState(
+            {
+                ("coord_0", "r_near"): 0.15,  # Below 0.3 threshold
+                ("coord_0", "r_far"): 0.40,  # Above threshold
+            }
+        )
 
         task = _make_task("t_0", 0.0, x=100.0, y=100.0)
 
         coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            [task], locator, net, "coord_0", 100.0
-        )
+        assignments = coord.assign_tasks([task], locator, net, "coord_0", 100.0)
 
         assert len(assignments) == 1
         assert assignments[0].responder_id == "r_far"
@@ -323,17 +329,17 @@ class TestBug2ThresholdFiltering:
         }
         locator = MockResponderLocator(positions)
 
-        net = MockNetworkState({
-            ("coord_0", "r_boundary"): 0.3,   # Exactly at threshold → excluded
-            ("coord_0", "r_above"): 0.35,      # Just above → included
-        })
+        net = MockNetworkState(
+            {
+                ("coord_0", "r_boundary"): 0.3,  # Exactly at threshold → excluded
+                ("coord_0", "r_above"): 0.35,  # Just above → included
+            }
+        )
 
         task = _make_task("t_0", 0.0, x=100.0, y=100.0)
 
         coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            [task], locator, net, "coord_0", 100.0
-        )
+        assignments = coord.assign_tasks([task], locator, net, "coord_0", 100.0)
 
         assert len(assignments) == 1
         assert assignments[0].responder_id == "r_above"
@@ -346,17 +352,17 @@ class TestBug2ThresholdFiltering:
         }
         locator = MockResponderLocator(positions)
 
-        net = MockNetworkState({
-            ("coord_0", "r_0"): 0.10,
-            ("coord_0", "r_1"): 0.25,
-        })
+        net = MockNetworkState(
+            {
+                ("coord_0", "r_0"): 0.10,
+                ("coord_0", "r_1"): 0.25,
+            }
+        )
 
         task = _make_task("t_0", 0.0, x=100.0, y=100.0)
 
         coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            [task], locator, net, "coord_0", 100.0
-        )
+        assignments = coord.assign_tasks([task], locator, net, "coord_0", 100.0)
 
         assert len(assignments) == 0
         assert coord._failed_assignments == 1
@@ -388,10 +394,12 @@ class TestWorkloadBalancing:
         }
         locator = MockResponderLocator(positions)
 
-        net = MockNetworkState({
-            ("coord_0", "r_a"): 0.40,
-            ("coord_0", "r_b"): 0.40,
-        })
+        net = MockNetworkState(
+            {
+                ("coord_0", "r_a"): 0.40,
+                ("coord_0", "r_b"): 0.40,
+            }
+        )
 
         # Cycle 1
         task1 = _make_task("t_1", 0.0, x=155.0, y=555.0)
@@ -405,9 +413,9 @@ class TestWorkloadBalancing:
         second = a2[0].responder_id
 
         # Inter-cycle penalty flips selection
-        assert second != first, (
-            f"Inter-cycle penalty should flip selection, got {second} both times"
-        )
+        assert (
+            second != first
+        ), f"Inter-cycle penalty should flip selection, got {second} both times"
         assert len(a2) == 1
 
     def test_best_candidate_not_blocked_within_cycle(self):
@@ -416,21 +424,20 @@ class TestWorkloadBalancing:
         can receive multiple tasks in the same cycle when it is clearly superior.
         """
         positions = {
-            "r_best": (105.0, 105.0),    # Very close to all tasks, highest P
-            "r_far": (2000.0, 1000.0),   # Far away
+            "r_best": (105.0, 105.0),  # Very close to all tasks, highest P
+            "r_far": (2000.0, 1000.0),  # Far away
         }
         locator = MockResponderLocator(positions)
 
-        net = MockNetworkState({
-            ("coord_0", "r_best"): 0.50,
-            ("coord_0", "r_far"): 0.35,
-        })
+        net = MockNetworkState(
+            {
+                ("coord_0", "r_best"): 0.50,
+                ("coord_0", "r_far"): 0.35,
+            }
+        )
 
         # 3 tasks all near r_best
-        tasks = [
-            _make_task(f"t_{i}", float(i), x=100.0, y=100.0)
-            for i in range(3)
-        ]
+        tasks = [_make_task(f"t_{i}", float(i), x=100.0, y=100.0) for i in range(3)]
 
         coord = AdaptiveCoordinator()
         assignments = coord.assign_tasks(
@@ -451,22 +458,22 @@ class TestWorkloadBalancing:
         not the max distance among candidates.
         """
         positions = {
-            "r_close": (110.0, 110.0),   # ~14 m from task at (100, 100)
-            "r_far": (1000.0, 1000.0),   # ~1273 m from task
+            "r_close": (110.0, 110.0),  # ~14 m from task at (100, 100)
+            "r_far": (1000.0, 1000.0),  # ~1273 m from task
         }
         locator = MockResponderLocator(positions)
 
-        net = MockNetworkState({
-            ("coord_0", "r_close"): 0.35,
-            ("coord_0", "r_far"): 0.35,
-        })
+        net = MockNetworkState(
+            {
+                ("coord_0", "r_close"): 0.35,
+                ("coord_0", "r_far"): 0.35,
+            }
+        )
 
         task = _make_task("t_0", 0.0, x=100.0, y=100.0)
 
         coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            [task], locator, net, "coord_0", 100.0
-        )
+        assignments = coord.assign_tasks([task], locator, net, "coord_0", 100.0)
 
         assert len(assignments) == 1
         # With equal P, the closer node must win

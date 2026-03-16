@@ -59,7 +59,9 @@ class ExperimentConfig(BaseModel):
     )
 
     network: NetworkParameters = Field(default_factory=NetworkParameters)
-    communication: CommunicationParameters = Field(default_factory=CommunicationParameters)
+    communication: CommunicationParameters = Field(
+        default_factory=CommunicationParameters
+    )
     scenario: ScenarioParameters = Field(default_factory=ScenarioParameters)
     coordination: CoordinationParameters = Field(default_factory=CoordinationParameters)
 
@@ -70,7 +72,9 @@ class ExperimentConfig(BaseModel):
 
     @field_validator("algorithms")
     @classmethod
-    def validate_at_least_one_enabled(cls, v: list[AlgorithmConfig]) -> list[AlgorithmConfig]:
+    def validate_at_least_one_enabled(
+        cls, v: list[AlgorithmConfig]
+    ) -> list[AlgorithmConfig]:
         """Ensure at least one algorithm is enabled."""
         if not any(alg.enabled for alg in v):
             raise ValueError("At least one algorithm must be enabled")
@@ -79,7 +83,9 @@ class ExperimentConfig(BaseModel):
     @model_validator(mode="after")
     def validate_cross_parameters(self) -> "ExperimentConfig":
         """Validate cross-parameter constraints."""
-        total_nodes = self.network.coordination_node_count + self.network.mobile_responder_count
+        total_nodes = (
+            self.network.coordination_node_count + self.network.mobile_responder_count
+        )
         if total_nodes != self.network.primary_node_count:
             raise ValueError(
                 f"Node counts inconsistent: {self.network.coordination_node_count} + "
@@ -135,7 +141,7 @@ def load_experiment_config(config_path: str | Path) -> ExperimentConfig:
     if not config_path.exists():
         raise FileNotFoundError(f"Configuration file not found: {config_path}")
 
-    with open(config_path, "r") as f:
+    with config_path.open() as f:
         config_dict = yaml.safe_load(f)
 
     return ExperimentConfig(**config_dict)

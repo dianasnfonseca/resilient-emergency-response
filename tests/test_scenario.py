@@ -11,19 +11,11 @@ the specifications from the Phase 3 documentation:
 
 import numpy as np
 import pytest
-
-from ercs.config.parameters import (
-    NetworkParameters,
-    ScenarioParameters,
-    UrgencyDistribution,
-    UrgencyLevel,
-)
 from conftest import (
     ALGORITHMS,
     CONNECTIVITY_MILD,
     CONNECTIVITY_MODERATE,
     CONNECTIVITY_SCENARIOS,
-    CONNECTIVITY_SEVERE,
     MESSAGE_RATE_PER_MIN,
     RUNS_PER_CONFIG,
     SIMULATION_DURATION_S,
@@ -32,6 +24,12 @@ from conftest import (
     URGENCY_LOW_PROP,
     URGENCY_MEDIUM_PROP,
     WARMUP_PERIOD_S,
+)
+
+from ercs.config.parameters import (
+    ScenarioParameters,
+    UrgencyDistribution,
+    UrgencyLevel,
 )
 from ercs.scenario import (
     ExperimentConfiguration,
@@ -286,7 +284,9 @@ class TestScenarioGenerator:
             total_tasks += scenario.total_tasks
 
         avg_tasks = total_tasks / num_scenarios
-        expected_tasks = MESSAGE_RATE_PER_MIN * (SIMULATION_DURATION_S / 60)  # 2/min * 100 min = 200
+        expected_tasks = MESSAGE_RATE_PER_MIN * (
+            SIMULATION_DURATION_S / 60
+        )  # 2/min * 100 min = 200
 
         # Should be within 20% of expected
         assert abs(avg_tasks - expected_tasks) / expected_tasks < 0.2
@@ -358,7 +358,7 @@ class TestScenarioGenerator:
 
         assert scenario1.total_tasks == scenario2.total_tasks
 
-        for t1, t2 in zip(scenario1.tasks, scenario2.tasks):
+        for t1, t2 in zip(scenario1.tasks, scenario2.tasks, strict=False):
             assert t1.creation_time == t2.creation_time
             assert t1.target_location_x == t2.target_location_x
             assert t1.urgency == t2.urgency
@@ -374,7 +374,7 @@ class TestScenarioGenerator:
         # At least some tasks should have different creation times
         differences = sum(
             1
-            for t1, t2 in zip(scenario1.tasks, scenario2.tasks)
+            for t1, t2 in zip(scenario1.tasks, scenario2.tasks, strict=False)
             if t1.creation_time != t2.creation_time
         )
         assert differences > 0
@@ -392,7 +392,9 @@ class TestScenarioGenerator:
 
         # Check connectivity levels
         conn_75 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MILD]
-        conn_40 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MODERATE]
+        conn_40 = [
+            s for s in scenarios if s.connectivity_level == CONNECTIVITY_MODERATE
+        ]
 
         assert len(conn_75) == 5
         assert len(conn_40) == 5
@@ -527,7 +529,9 @@ class TestConvenienceFunctions:
 
         # Verify connectivity distribution
         conn_75 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MILD]
-        conn_40 = [s for s in scenarios if s.connectivity_level == CONNECTIVITY_MODERATE]
+        conn_40 = [
+            s for s in scenarios if s.connectivity_level == CONNECTIVITY_MODERATE
+        ]
 
         assert len(conn_75) == 5
         assert len(conn_40) == 5
@@ -607,7 +611,7 @@ class TestPoissonStatistics:
         For a Poisson process with rate λ, inter-arrival times should
         be exponentially distributed with mean 1/λ.
         """
-        generator = ScenarioGenerator(random_seed=42)
+        ScenarioGenerator(random_seed=42)
 
         # Collect many inter-arrival times
         all_intervals = []

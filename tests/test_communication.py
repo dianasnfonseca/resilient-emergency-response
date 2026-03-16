@@ -15,14 +15,6 @@ Additional parameters:
 """
 
 import pytest
-import numpy as np
-
-from ercs.config.parameters import (
-    CommunicationParameters,
-    NetworkParameters,
-    PRoPHETParameters,
-    BufferDropPolicy,
-)
 from conftest import (
     AGING_INTERVAL_S,
     BETA,
@@ -34,6 +26,7 @@ from conftest import (
     P_ENC_MAX,
     TRANSMIT_SPEED_BPS,
 )
+
 from ercs.communication import (
     CommunicationLayer,
     DeliveryPredictabilityMatrix,
@@ -41,8 +34,13 @@ from ercs.communication import (
     MessageBuffer,
     MessageStatus,
     MessageType,
-    TransmissionResult,
     create_message,
+)
+from ercs.config.parameters import (
+    BufferDropPolicy,
+    CommunicationParameters,
+    NetworkParameters,
+    PRoPHETParameters,
 )
 
 # =============================================================================
@@ -656,7 +654,7 @@ class TestDeliveryPredictabilityMatrix:
 
         p = matrix.get_predictability("node_a", "node_b")
         k = 60.0 / AGING_INTERVAL_S
-        expected = P_ENC_MAX * (GAMMA ** k)
+        expected = P_ENC_MAX * (GAMMA**k)
         assert p == pytest.approx(expected, rel=0.001)
 
     def test_aging_slow_decay_with_prophetv2_gamma(
@@ -961,7 +959,7 @@ class TestCommunicationLayer:
         comm_layer.predictability.set_predictability("mobile_0", "coord_0", 0.5)
         comm_layer.predictability.set_predictability("mobile_1", "coord_0", 0.5)
 
-        msg = comm_layer.create_message(
+        comm_layer.create_message(
             source_id="mobile_0",
             destination_id="coord_0",
             message_type=MessageType.COORDINATION,
@@ -998,7 +996,7 @@ class TestCommunicationLayer:
 
     def test_no_forward_when_both_zero(self, comm_layer: CommunicationLayer):
         """Test no forwarding when both nodes have zero predictability."""
-        msg = comm_layer.create_message(
+        comm_layer.create_message(
             source_id="mobile_0",
             destination_id="coord_0",
             message_type=MessageType.COORDINATION,
@@ -1238,9 +1236,7 @@ class TestCommunicationIntegration:
 
         # Simulate 100 encounters between mobile_0 and mobile_1 every 10s
         for i in range(100):
-            layer.process_encounter(
-                "mobile_0", "mobile_1", current_time=float(i * 10)
-            )
+            layer.process_encounter("mobile_0", "mobile_1", current_time=float(i * 10))
 
         p = layer.get_delivery_predictability("mobile_0", "mobile_1")
 

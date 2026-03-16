@@ -10,30 +10,27 @@ the specifications from the Phase 4 documentation:
 """
 
 import pytest
-import numpy as np
-
-from ercs.config.parameters import (
-    AlgorithmType,
-    CoordinationParameters,
-    UrgencyLevel,
-)
-from ercs.scenario.generator import Task, TaskStatus
-from ercs.coordination import (
-    AdaptiveCoordinator,
-    Assignment,
-    BaselineCoordinator,
-    CoordinationEvent,
-    CoordinationManager,
-    CoordinatorBase,
-    EventType,
-    create_coordinator,
-)
 from conftest import (
     COORDINATION_INTERVAL_S,
     P_INIT,
     PATH_THRESHOLD,
     PRIORITY_LEVELS,
 )
+
+from ercs.config.parameters import (
+    AlgorithmType,
+    CoordinationParameters,
+    UrgencyLevel,
+)
+from ercs.coordination import (
+    AdaptiveCoordinator,
+    Assignment,
+    BaselineCoordinator,
+    CoordinationManager,
+    EventType,
+    create_coordinator,
+)
+from ercs.scenario.generator import Task
 
 # =============================================================================
 # Mock Implementations for Testing
@@ -245,7 +242,7 @@ class TestAdaptiveCoordinator:
         assert len(assignments) == 3
 
         # Check order: HIGH first, then MEDIUM, then LOW
-        urgency_order = [a.task.urgency for a in assignments]
+        [a.task.urgency for a in assignments]
 
         # First should be HIGH (task_0002)
         assert assignments[0].task.task_id == "task_0002"

@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from ercs.config.parameters import SimulationConfig
 from ercs.coordination.algorithms import AlgorithmType
-from ercs.simulation.engine import SimulationEngine, SimulationEventType
+from ercs.simulation.engine import SimulationEngine
 
 
 class CoordinationSpy(SimulationEngine):
@@ -54,9 +54,12 @@ class CoordinationSpy(SimulationEngine):
         # Get the assignments that were just made
         all_assignments = self._manager._all_assignments
         # The last N assignments are from this cycle
-        new_assignments = all_assignments[-(len(all_assignments) - sum(
-            len(c["tasks"]) for c in self.captured_cycles
-        )):]
+        new_assignments = all_assignments[
+            -(
+                len(all_assignments)
+                - sum(len(c["tasks"]) for c in self.captured_cycles)
+            ) :
+        ]
 
         for a in new_assignments:
             rid = a.responder_id
@@ -64,18 +67,20 @@ class CoordinationSpy(SimulationEngine):
             # Distance from task to responder
             task_x, task_y = a.task.target_location_x, a.task.target_location_y
             rx, ry = info.get("x", 0), info.get("y", 0)
-            dist = ((task_x - rx)**2 + (task_y - ry)**2) ** 0.5
+            dist = ((task_x - rx) ** 2 + (task_y - ry) ** 2) ** 0.5
 
-            cycle_data["tasks"].append({
-                "task_id": a.task_id[:12],
-                "urgency": a.task.urgency.value,
-                "task_pos": (task_x, task_y),
-                "responder_id": rid,
-                "responder_pos": (rx, ry),
-                "distance": dist,
-                "predictability": a.predictability,
-                "created_at": a.task.creation_time,
-            })
+            cycle_data["tasks"].append(
+                {
+                    "task_id": a.task_id[:12],
+                    "urgency": a.task.urgency.value,
+                    "task_pos": (task_x, task_y),
+                    "responder_id": rid,
+                    "responder_pos": (rx, ry),
+                    "distance": dist,
+                    "predictability": a.predictability,
+                    "created_at": a.task.creation_time,
+                }
+            )
 
         self.captured_cycles.append(cycle_data)
 
@@ -107,27 +112,44 @@ def print_cycle(cycle, algorithm):
         return
 
     # Header
-    print(f"  {'#':>2}  {'Urg':>3}  {'Task':12}  {'Responder':12}  "
-          f"{'Dist':>7}  {'Pred':>8}  {'Task Pos':>16}  {'Resp Pos':>16}")
-    print(f"  {'—' * 2}  {'—' * 3}  {'—' * 12}  {'—' * 12}  "
-          f"{'—' * 7}  {'—' * 8}  {'—' * 16}  {'—' * 16}")
+    print(
+        f"  {'#':>2}  {'Urg':>3}  {'Task':12}  {'Responder':12}  "
+        f"{'Dist':>7}  {'Pred':>8}  {'Task Pos':>16}  {'Resp Pos':>16}"
+    )
+    print(
+        f"  {'—' * 2}  {'—' * 3}  {'—' * 12}  {'—' * 12}  "
+        f"{'—' * 7}  {'—' * 8}  {'—' * 16}  {'—' * 16}"
+    )
 
     for i, t in enumerate(cycle["tasks"]):
-        pred_str = f"{t['predictability']:.6f}" if t['predictability'] is not None else "   N/A"
+        pred_str = (
+            f"{t['predictability']:.6f}"
+            if t["predictability"] is not None
+            else "   N/A"
+        )
         tx, ty = t["task_pos"]
         rx, ry = t["responder_pos"]
-        print(f"  {i + 1:2d}  {t['urgency']:>3}  {t['task_id']:12}  {t['responder_id']:12}  "
-              f"{t['distance']:7.0f}m  {pred_str}  ({tx:6.0f},{ty:6.0f})  ({rx:6.0f},{ry:6.0f})")
+        print(
+            f"  {i + 1:2d}  {t['urgency']:>3}  {t['task_id']:12}  {t['responder_id']:12}  "
+            f"{t['distance']:7.0f}m  {pred_str}  ({tx:6.0f},{ty:6.0f})  ({rx:6.0f},{ry:6.0f})"
+        )
 
     # Show responders with P > 0 at this moment
-    nonzero_p = {rid: info for rid, info in cycle["responder_snapshot"].items()
-                 if info["predictability"] > 0.001}
-    print(f"\n  Responders with P > 0.001: {len(nonzero_p)} / {len(cycle['responder_snapshot'])}")
+    nonzero_p = {
+        rid: info
+        for rid, info in cycle["responder_snapshot"].items()
+        if info["predictability"] > 0.001
+    }
+    print(
+        f"\n  Responders with P > 0.001: {len(nonzero_p)} / {len(cycle['responder_snapshot'])}"
+    )
     if nonzero_p:
         sorted_p = sorted(nonzero_p.items(), key=lambda x: -x[1]["predictability"])
         for rid, info in sorted_p[:10]:
-            print(f"    {rid:12s}  P = {info['predictability']:.6f}  "
-                  f"at ({info['x']:.0f}, {info['y']:.0f})")
+            print(
+                f"    {rid:12s}  P = {info['predictability']:.6f}  "
+                f"at ({info['x']:.0f}, {info['y']:.0f})"
+            )
 
 
 def main():
@@ -172,8 +194,12 @@ def main():
 
         # Tasks in common
         common_tasks = set(a_assignments) & set(b_assignments)
-        same = sum(1 for tid in common_tasks if a_assignments[tid] == b_assignments[tid])
-        diff = sum(1 for tid in common_tasks if a_assignments[tid] != b_assignments[tid])
+        same = sum(
+            1 for tid in common_tasks if a_assignments[tid] == b_assignments[tid]
+        )
+        diff = sum(
+            1 for tid in common_tasks if a_assignments[tid] != b_assignments[tid]
+        )
 
         print(f"\n  t={t:.0f}s:")
         print(f"    Adaptive assigned: {len(a_assignments)} tasks")
@@ -182,19 +208,29 @@ def main():
         print(f"    Same responder: {same}  |  Different responder: {diff}")
 
         if diff > 0:
-            print(f"\n    Tasks with DIFFERENT responders:")
-            print(f"    {'Task':12}  {'Urg':>3}  {'Adaptive':12}  {'A.Dist':>7}  {'A.Pred':>8}  "
-                  f"{'Baseline':12}  {'B.Dist':>7}")
-            print(f"    {'—' * 12}  {'—' * 3}  {'—' * 12}  {'—' * 7}  {'—' * 8}  "
-                  f"{'—' * 12}  {'—' * 7}")
+            print("\n    Tasks with DIFFERENT responders:")
+            print(
+                f"    {'Task':12}  {'Urg':>3}  {'Adaptive':12}  {'A.Dist':>7}  {'A.Pred':>8}  "
+                f"{'Baseline':12}  {'B.Dist':>7}"
+            )
+            print(
+                f"    {'—' * 12}  {'—' * 3}  {'—' * 12}  {'—' * 7}  {'—' * 8}  "
+                f"{'—' * 12}  {'—' * 7}"
+            )
             for tid in sorted(common_tasks):
                 if a_assignments[tid] != b_assignments[tid]:
                     at = next(x for x in ac["tasks"] if x["task_id"] == tid)
                     bt = next(x for x in bc["tasks"] if x["task_id"] == tid)
-                    pred_str = f"{at['predictability']:.6f}" if at['predictability'] else "   N/A"
-                    print(f"    {tid:12}  {at['urgency']:>3}  "
-                          f"{at['responder_id']:12}  {at['distance']:7.0f}m  {pred_str}  "
-                          f"{bt['responder_id']:12}  {bt['distance']:7.0f}m")
+                    pred_str = (
+                        f"{at['predictability']:.6f}"
+                        if at["predictability"]
+                        else "   N/A"
+                    )
+                    print(
+                        f"    {tid:12}  {at['urgency']:>3}  "
+                        f"{at['responder_id']:12}  {at['distance']:7.0f}m  {pred_str}  "
+                        f"{bt['responder_id']:12}  {bt['distance']:7.0f}m"
+                    )
 
         # Only show first meaningful cycle
         break

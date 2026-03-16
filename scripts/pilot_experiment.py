@@ -33,13 +33,15 @@ from ercs.simulation.engine import SimulationEngine, SimulationEventType
 ALGORITHMS = [AlgorithmType.ADAPTIVE, AlgorithmType.BASELINE]
 
 # Load valid seeds if available
-VALID_SEEDS_PATH = Path(__file__).resolve().parent.parent / "config" / "valid_seeds.json"
+VALID_SEEDS_PATH = (
+    Path(__file__).resolve().parent.parent / "configs" / "valid_seeds.json"
+)
 BASE_SEED = 42
 
 
 def _get_seeds(count: int) -> list[int]:
     if VALID_SEEDS_PATH.exists():
-        with open(VALID_SEEDS_PATH) as f:
+        with VALID_SEEDS_PATH.open() as f:
             data = json.load(f)
         seeds = [int(s) for s in data.get("valid_seeds", [])]
         if len(seeds) >= count:
@@ -80,11 +82,15 @@ def _check_k_max_violations(result) -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="ERCS pilot experiment")
     parser.add_argument(
-        "--runs", type=int, default=5,
+        "--runs",
+        type=int,
+        default=5,
         help="Runs per configuration (default: 5)",
     )
     parser.add_argument(
-        "--connectivity", type=float, nargs="+",
+        "--connectivity",
+        type=float,
+        nargs="+",
         default=[0.75, 0.40, 0.20],
         help="Connectivity levels (default: 0.75 0.40 0.20)",
     )
@@ -96,13 +102,17 @@ def main() -> None:
     config = SimulationConfig()
     seeds = _get_seeds(runs_per_config)
 
-    print(f"Config: warmup={config.scenario.warmup_period_seconds}s, "
-          f"duration={config.scenario.simulation_duration_seconds}s, "
-          f"total={config.total_simulation_duration}s")
-    print(f"Threshold={config.coordination.available_path_threshold}, "
-          f"α={config.coordination.predictability_weight}, "
-          f"γ_r={config.coordination.recency_weight}, "
-          f"β={config.coordination.proximity_weight}")
+    print(
+        f"Config: warmup={config.scenario.warmup_period_seconds}s, "
+        f"duration={config.scenario.simulation_duration_seconds}s, "
+        f"total={config.total_simulation_duration}s"
+    )
+    print(
+        f"Threshold={config.coordination.available_path_threshold}, "
+        f"α={config.coordination.predictability_weight}, "
+        f"γ_r={config.coordination.recency_weight}, "
+        f"β={config.coordination.proximity_weight}"
+    )
     print(f"Runs per config: {runs_per_config}\n")
 
     total = len(ALGORITHMS) * len(connectivity_levels) * runs_per_config
@@ -132,8 +142,10 @@ def main() -> None:
                 # Check k_max for adaptive runs
                 k_max_violations = _check_k_max_violations(result)
                 if k_max_violations:
-                    header = (f"  [{algorithm.value} @ {connectivity:.2f} "
-                              f"run {run} seed {seed}]")
+                    header = (
+                        f"  [{algorithm.value} @ {connectivity:.2f} "
+                        f"run {run} seed {seed}]"
+                    )
                     all_k_max_violations.append(header)
                     all_k_max_violations.extend(k_max_violations)
 
@@ -167,20 +179,19 @@ def main() -> None:
     # ── Save raw per-run data to JSON for statistical analysis ──────────
     output_dir = Path(__file__).resolve().parent.parent / "output"
     output_dir.mkdir(exist_ok=True)
-    serialisable = {
-        f"{alg}@{conn}": runs
-        for (alg, conn), runs in results.items()
-    }
+    serialisable = {f"{alg}@{conn}": runs for (alg, conn), runs in results.items()}
     raw_path = output_dir / "pilot_raw_results.json"
-    with open(raw_path, "w") as f:
+    with raw_path.open("w") as f:
         json.dump(serialisable, f, indent=2)
     print(f"Raw per-run data saved to {raw_path}\n")
 
     # ── Print summary table ─────────────────────────────────────────────
     sep = "=" * 75
     print(sep)
-    print(f"{'Algorithm':<10} {'Conn':>5} │ {'Del.Rate':>8} {'Del.Time':>8} "
-          f"{'Asgn.Rate':>9} {'Tasks':>6} {'Dlvd':>5}")
+    print(
+        f"{'Algorithm':<10} {'Conn':>5} │ {'Del.Rate':>8} {'Del.Time':>8} "
+        f"{'Asgn.Rate':>9} {'Tasks':>6} {'Dlvd':>5}"
+    )
     print(sep)
 
     # Store mean values for acceptance checks
@@ -194,8 +205,11 @@ def main() -> None:
             runs = results[key]
 
             del_rates = [r["delivery_rate"] for r in runs]
-            del_times = [r["avg_delivery_time"] for r in runs
-                         if r["avg_delivery_time"] is not None]
+            del_times = [
+                r["avg_delivery_time"]
+                for r in runs
+                if r["avg_delivery_time"] is not None
+            ]
             asgn_rates = [r["assignment_rate"] for r in runs]
             total_tasks = [r["total_tasks"] for r in runs]
             delivered = [r["messages_delivered"] for r in runs]
@@ -237,8 +251,10 @@ def main() -> None:
     if adap_dt_20 is not None and base_dt_20 is not None:
         cond2 = adap_dt_20 < base_dt_20
         status2 = "PASS" if cond2 else "FAIL"
-        print(f"  2. Adaptive del_time ({adap_dt_20:.1f}s) < "
-              f"Baseline del_time ({base_dt_20:.1f}s) at 20%: {status2}")
+        print(
+            f"  2. Adaptive del_time ({adap_dt_20:.1f}s) < "
+            f"Baseline del_time ({base_dt_20:.1f}s) at 20%: {status2}"
+        )
     else:
         cond2 = False
         status2 = "FAIL"

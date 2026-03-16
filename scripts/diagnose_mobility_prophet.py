@@ -26,9 +26,9 @@ from ercs.config.parameters import (
 from ercs.coordination.algorithms import AlgorithmType
 from ercs.network.mobility import (
     MobilityManager,
+    _assign_roles,
     _build_role_configs,
     _build_role_distribution,
-    _assign_roles,
 )
 from ercs.network.topology import generate_topology
 from ercs.simulation.engine import SimulationEngine
@@ -43,6 +43,7 @@ ROLE_DISTRIBUTION = _build_role_distribution(_NET_PARAMS)
 # Helpers
 # ============================================================================
 
+
 def header(title: str) -> None:
     print(f"\n{'=' * 70}")
     print(f"  {title}")
@@ -56,6 +57,7 @@ def subheader(title: str) -> None:
 # ============================================================================
 # Part 1: Verify Roles and Mobility
 # ============================================================================
+
 
 def diagnose_roles_and_mobility(config: SimulationConfig, seed: int = 42) -> None:
     header("PART 1: ROLE ASSIGNMENT & MOBILITY")
@@ -72,7 +74,9 @@ def diagnose_roles_and_mobility(config: SimulationConfig, seed: int = 42) -> Non
         expected_pct = ROLE_DISTRIBUTION[role] * 100
         actual = role_counts.get(role, 0)
         actual_pct = actual / n_mobile * 100
-        print(f"    {role.value:12s}: {actual:3d} ({actual_pct:5.1f}%)  expected ~{expected_pct:.0f}%")
+        print(
+            f"    {role.value:12s}: {actual:3d} ({actual_pct:5.1f}%)  expected ~{expected_pct:.0f}%"
+        )
 
     # 1b. Verify waypoints per role
     subheader("1b. Waypoint Zone Verification (100 waypoints per node)")
@@ -103,18 +107,25 @@ def diagnose_roles_and_mobility(config: SimulationConfig, seed: int = 42) -> Non
     cz_x_min, cz_x_max = cz.origin_x, cz.origin_x + cz.width_m
     cz_y_min, cz_y_max = cz.origin_y, cz.origin_y + cz.height_m
 
-    print(f"  Incident zone:     x=[{iz_x_min:.0f}, {iz_x_max:.0f}], y=[{iz_y_min:.0f}, {iz_y_max:.0f}]")
-    print(f"  Coordination zone: x=[{cz_x_min:.0f}, {cz_x_max:.0f}], y=[{cz_y_min:.0f}, {cz_y_max:.0f}]")
+    print(
+        f"  Incident zone:     x=[{iz_x_min:.0f}, {iz_x_max:.0f}], y=[{iz_y_min:.0f}, {iz_y_max:.0f}]"
+    )
+    print(
+        f"  Coordination zone: x=[{cz_x_min:.0f}, {cz_x_max:.0f}], y=[{cz_y_min:.0f}, {cz_y_max:.0f}]"
+    )
 
     def in_zone(x, y, zone):
-        return (zone.origin_x <= x <= zone.origin_x + zone.width_m and
-                zone.origin_y <= y <= zone.origin_y + zone.height_m)
+        return (
+            zone.origin_x <= x <= zone.origin_x + zone.width_m
+            and zone.origin_y <= y <= zone.origin_y + zone.height_m
+        )
 
     # Force many waypoint assignments and check zones
-    waypoint_checks = {role: {"in_incident": 0, "in_coord": 0, "total": 0}
-                       for role in ResponderRole}
+    waypoint_checks = {
+        role: {"in_incident": 0, "in_coord": 0, "total": 0} for role in ResponderRole
+    }
 
-    for nid, state in mobility._node_states.items():
+    for _nid, state in mobility._node_states.items():
         role = state.role
         if role is None:
             continue
@@ -171,7 +182,9 @@ def diagnose_roles_and_mobility(config: SimulationConfig, seed: int = 42) -> Non
         n_role = role_counts[role]
         n_iz = role_in_iz.get(role, 0)
         n_cz = role_in_cz.get(role, 0)
-        print(f"    {role.value:12s}: {n_iz}/{n_role} in incident, {n_cz}/{n_role} in coord")
+        print(
+            f"    {role.value:12s}: {n_iz}/{n_role} in incident, {n_cz}/{n_role} in coord"
+        )
 
     # 1d. Distance of each node to coord zone centre
     subheader("1d. Distance to Coordination Zone Centre at t=3000s")
@@ -187,14 +200,17 @@ def diagnose_roles_and_mobility(config: SimulationConfig, seed: int = 42) -> Non
     for role in ResponderRole:
         dists = role_distances[role]
         if dists:
-            print(f"  {role.value:12s}: mean={np.mean(dists):.0f}m, "
-                  f"min={np.min(dists):.0f}m, max={np.max(dists):.0f}m, "
-                  f"within 100m: {sum(1 for d in dists if d <= 100)}/{len(dists)}")
+            print(
+                f"  {role.value:12s}: mean={np.mean(dists):.0f}m, "
+                f"min={np.min(dists):.0f}m, max={np.max(dists):.0f}m, "
+                f"within 100m: {sum(1 for d in dists if d <= 100)}/{len(dists)}"
+            )
 
 
 # ============================================================================
 # Part 2: PRoPHET Aging Verification
 # ============================================================================
+
 
 def diagnose_prophet_aging(config: SimulationConfig) -> None:
     header("PART 2: PRoPHET AGING VERIFICATION")
@@ -203,9 +219,13 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
 
     # 2a. Check update_interval value
     subheader("2a. Update Interval Configuration")
-    print(f"  config.communication.update_interval_seconds = {comm.update_interval_seconds}")
-    print(f"  DeliveryPredictabilityMatrix default = 0.1")
-    print(f"  CommunicationLayer passes: comm_params.update_interval_seconds = {comm.update_interval_seconds}")
+    print(
+        f"  config.communication.update_interval_seconds = {comm.update_interval_seconds}"
+    )
+    print("  DeliveryPredictabilityMatrix default = 0.1")
+    print(
+        f"  CommunicationLayer passes: comm_params.update_interval_seconds = {comm.update_interval_seconds}"
+    )
 
     # 2b. Manual aging test
     subheader("2b. Manual Aging Test (P_enc_max=0.5, γ=0.999885791, interval=30s)")
@@ -235,7 +255,7 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
         matrix2.age_predictabilities("A", float(t))
         p = matrix2.get_predictability("A", "B")
         k = t / comm.update_interval_seconds
-        expected = 0.5 * comm.prophet.gamma ** k if k >= 1 else 0.5
+        expected = 0.5 * comm.prophet.gamma**k if k >= 1 else 0.5
         status = "OK" if abs(p - expected) < 0.001 else "MISMATCH!"
         print(f"  t={t:5d}s: k={k:6.1f}  P={p:.6f}  expected={expected:.6f}  {status}")
 
@@ -272,7 +292,7 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
     if high_p:
         print(f"  P exceeded 0.9 at t={high_p[0]}s")
     else:
-        print(f"  P never exceeded 0.9 — PRoPHETv2 anti-saturation working!")
+        print("  P never exceeded 0.9 — PRoPHETv2 anti-saturation working!")
 
     # 2d. What if encounters are less frequent?
     subheader("2d. Encounter Frequency Sensitivity (PRoPHETv2)")
@@ -290,12 +310,15 @@ def diagnose_prophet_aging(config: SimulationConfig) -> None:
             m.update_encounter("A", "B", float(t))
         p = m.get_predictability("A", "B")
         n_encounters = 1800 // interval + 1
-        print(f"  Encounter every {interval:4d}s ({n_encounters:3d} total): P = {p:.6f}")
+        print(
+            f"  Encounter every {interval:4d}s ({n_encounters:3d} total): P = {p:.6f}"
+        )
 
 
 # ============================================================================
 # Part 3: Encounter Frequency in Actual Simulation
 # ============================================================================
+
 
 def diagnose_encounter_frequency(config: SimulationConfig, seed: int = 42) -> None:
     header("PART 3: ENCOUNTER FREQUENCY (ACTUAL SIMULATION)")
@@ -326,9 +349,11 @@ def diagnose_encounter_frequency(config: SimulationConfig, seed: int = 42) -> No
                 if not self._is_link_available(node_a, node_b):
                     continue
                 self.encounter_log.append(
-                    (event.timestamp, node_a, node_b, "mobility_new"))
+                    (event.timestamp, node_a, node_b, "mobility_new")
+                )
                 delivered = self._communication.process_encounter(
-                    node_a=node_a, node_b=node_b, current_time=event.timestamp)
+                    node_a=node_a, node_b=node_b, current_time=event.timestamp
+                )
                 self._process_delivered_messages(delivered, event.timestamp, results)
 
         def _handle_node_encounters(self, event, results):
@@ -339,10 +364,10 @@ def diagnose_encounter_frequency(config: SimulationConfig, seed: int = 42) -> No
             for node_a, node_b in edges:
                 if not self._is_link_available(node_a, node_b):
                     continue
-                self.encounter_log.append(
-                    (event.timestamp, node_a, node_b, "periodic"))
+                self.encounter_log.append((event.timestamp, node_a, node_b, "periodic"))
                 delivered = self._communication.process_encounter(
-                    node_a=node_a, node_b=node_b, current_time=event.timestamp)
+                    node_a=node_a, node_b=node_b, current_time=event.timestamp
+                )
                 self._process_delivered_messages(delivered, event.timestamp, results)
 
             expired = self._communication.expire_all_messages(event.timestamp)
@@ -350,10 +375,12 @@ def diagnose_encounter_frequency(config: SimulationConfig, seed: int = 42) -> No
 
     # Run short simulation (warmup only, 600s) at 20% connectivity
     short_config = SimulationConfig(
-        scenario=config.scenario.model_copy(update={
-            "warmup_period_seconds": 600,
-            "simulation_duration_seconds": 1,  # Almost no active sim
-        }),
+        scenario=config.scenario.model_copy(
+            update={
+                "warmup_period_seconds": 600,
+                "simulation_duration_seconds": 1,  # Almost no active sim
+            }
+        ),
     )
 
     engine = EncounterTracker(
@@ -411,9 +438,11 @@ def diagnose_encounter_frequency(config: SimulationConfig, seed: int = 42) -> No
     subheader("3a. Encounters by Category (600s, connectivity=0.20)")
     for cat in sorted(category_encounters.keys()):
         counts = category_encounters[cat]
-        print(f"  {cat:25s}: {len(counts):4d} pairs, "
-              f"mean={np.mean(counts):5.1f}, "
-              f"total={sum(counts):6d} encounters")
+        print(
+            f"  {cat:25s}: {len(counts):4d} pairs, "
+            f"mean={np.mean(counts):5.1f}, "
+            f"total={sum(counts):6d} encounters"
+        )
 
     # Edge counts over time
     subheader("3b. Graph Edge Count Over Time")
@@ -427,20 +456,23 @@ def diagnose_encounter_frequency(config: SimulationConfig, seed: int = 42) -> No
     total_pairs = 0
     available_pairs = 0
     for i, a in enumerate(all_node_ids):
-        for b in all_node_ids[i + 1:]:
+        for b in all_node_ids[i + 1 :]:
             total_pairs += 1
             if engine._is_link_available(a, b):
                 available_pairs += 1
 
     print(f"  Total possible node pairs: {total_pairs}")
-    print(f"  Link-available pairs:      {available_pairs} "
-          f"({100 * available_pairs / total_pairs:.1f}%)")
+    print(
+        f"  Link-available pairs:      {available_pairs} "
+        f"({100 * available_pairs / total_pairs:.1f}%)"
+    )
     print(f"  Expected at 20%:           {int(total_pairs * 0.20)}")
 
 
 # ============================================================================
 # Part 4: Predictability Matrix at Warm-up End
 # ============================================================================
+
 
 def diagnose_predictability(config: SimulationConfig, seed: int = 42) -> None:
     header("PART 4: PREDICTABILITY AT WARM-UP END")
@@ -496,9 +528,11 @@ def diagnose_predictability(config: SimulationConfig, seed: int = 42) -> None:
             continue
         arr = np.array(coord0_vals)
         nonzero = np.sum(arr > 0)
-        print(f"  t={t:6.0f}s: mean={arr.mean():.4f}, std={arr.std():.4f}, "
-              f"min={arr.min():.4f}, max={arr.max():.4f}, "
-              f"P>0: {nonzero}/{len(arr)}, P>0.9: {np.sum(arr > 0.9)}/{len(arr)}")
+        print(
+            f"  t={t:6.0f}s: mean={arr.mean():.4f}, std={arr.std():.4f}, "
+            f"min={arr.min():.4f}, max={arr.max():.4f}, "
+            f"P>0: {nonzero}/{len(arr)}, P>0.9: {np.sum(arr > 0.9)}/{len(arr)}"
+        )
 
     # At warmup end, break down by role
     warmup_t = config.scenario.warmup_period_seconds
@@ -507,7 +541,7 @@ def diagnose_predictability(config: SimulationConfig, seed: int = 42) -> None:
         snapshot = engine.p_snapshots[warmup_t]
 
         role_p_values = {role: [] for role in ResponderRole}
-        for (cid, mid), p in snapshot.items():
+        for (_cid, mid), p in snapshot.items():
             role = roles_map.get(mid)
             if role:
                 role_p_values[role].append(p)
@@ -516,10 +550,12 @@ def diagnose_predictability(config: SimulationConfig, seed: int = 42) -> None:
             vals = role_p_values[role]
             if vals:
                 arr = np.array(vals)
-                print(f"  {role.value:12s}: n={len(vals):3d}, "
-                      f"mean={arr.mean():.4f}, std={arr.std():.4f}, "
-                      f"min={arr.min():.4f}, max={arr.max():.4f}, "
-                      f"P>0.9: {np.sum(arr > 0.9)}/{len(vals)}")
+                print(
+                    f"  {role.value:12s}: n={len(vals):3d}, "
+                    f"mean={arr.mean():.4f}, std={arr.std():.4f}, "
+                    f"min={arr.min():.4f}, max={arr.max():.4f}, "
+                    f"P>0.9: {np.sum(arr > 0.9)}/{len(vals)}"
+                )
 
     # 4c. Check what P values the matrix has for mobile-to-mobile pairs
     subheader("4c. Mobile-to-Mobile P Values (sample)")
@@ -535,13 +571,16 @@ def diagnose_predictability(config: SimulationConfig, seed: int = 42) -> None:
             sample_pairs.append((a, b, ra, rb, p))
 
     for a, b, ra, rb, p in sample_pairs[:15]:
-        print(f"  P({a}, {b}) [{ra.value if hasattr(ra, 'value') else ra}"
-              f"-{rb.value if hasattr(rb, 'value') else rb}] = {p:.6f}")
+        print(
+            f"  P({a}, {b}) [{ra.value if hasattr(ra, 'value') else ra}"
+            f"-{rb.value if hasattr(rb, 'value') else rb}] = {p:.6f}"
+        )
 
 
 # ============================================================================
 # Part 5: Coordination Algorithm Comparison
 # ============================================================================
+
 
 def diagnose_coordination(config: SimulationConfig, seed: int = 42) -> None:
     header("PART 5: COORDINATION ALGORITHM COMPARISON")
@@ -576,22 +615,26 @@ def diagnose_coordination(config: SimulationConfig, seed: int = 42) -> None:
             nonzero_count = np.sum(p_arr > 0)
             above_09 = np.sum(p_arr > 0.9)
 
-            self.cycle_details.append({
-                "time": event.timestamp,
-                "pending": pending_count,
-                "assigned": results.tasks_assigned,
-                "p_mean": p_arr.mean(),
-                "p_std": p_arr.std(),
-                "p_min": p_arr.min(),
-                "p_max": p_arr.max(),
-                "p_nonzero": int(nonzero_count),
-                "p_above_09": int(above_09),
-                "total_responders": len(mobile_ids),
-            })
+            self.cycle_details.append(
+                {
+                    "time": event.timestamp,
+                    "pending": pending_count,
+                    "assigned": results.tasks_assigned,
+                    "p_mean": p_arr.mean(),
+                    "p_std": p_arr.std(),
+                    "p_min": p_arr.min(),
+                    "p_max": p_arr.max(),
+                    "p_nonzero": int(nonzero_count),
+                    "p_above_09": int(above_09),
+                    "total_responders": len(mobile_ids),
+                }
+            )
 
     # Run both algorithms
-    for algo_name, algo_type in [("Adaptive", AlgorithmType.ADAPTIVE),
-                                  ("Baseline", AlgorithmType.BASELINE)]:
+    for algo_name, algo_type in [
+        ("Adaptive", AlgorithmType.ADAPTIVE),
+        ("Baseline", AlgorithmType.BASELINE),
+    ]:
         engine = CoordDiag(
             config=config,
             algorithm_type=algo_type,
@@ -602,25 +645,36 @@ def diagnose_coordination(config: SimulationConfig, seed: int = 42) -> None:
 
         subheader(f"5a. {algo_name} Coordination Cycles (connectivity=0.20)")
         for cycle in engine.cycle_details:
-            print(f"  t={cycle['time']:6.0f}s: pending={cycle['pending']:3d}, "
-                  f"assigned={cycle['assigned']:3d}, "
-                  f"P: mean={cycle['p_mean']:.4f} std={cycle['p_std']:.4f} "
-                  f"[{cycle['p_min']:.4f}, {cycle['p_max']:.4f}] "
-                  f"P>0={cycle['p_nonzero']}/{cycle['total_responders']} "
-                  f"P>0.9={cycle['p_above_09']}/{cycle['total_responders']}")
+            print(
+                f"  t={cycle['time']:6.0f}s: pending={cycle['pending']:3d}, "
+                f"assigned={cycle['assigned']:3d}, "
+                f"P: mean={cycle['p_mean']:.4f} std={cycle['p_std']:.4f} "
+                f"[{cycle['p_min']:.4f}, {cycle['p_max']:.4f}] "
+                f"P>0={cycle['p_nonzero']}/{cycle['total_responders']} "
+                f"P>0.9={cycle['p_above_09']}/{cycle['total_responders']}"
+            )
 
         print(f"\n  {algo_name} results:")
         print(f"    Tasks total:    {result.total_tasks}")
-        print(f"    Tasks assigned: {result.tasks_assigned} ({result.assignment_rate:.1%})")
+        print(
+            f"    Tasks assigned: {result.tasks_assigned} ({result.assignment_rate:.1%})"
+        )
         print(f"    Msgs created:   {result.messages_created}")
-        print(f"    Msgs delivered: {result.messages_delivered} ({result.delivery_rate:.1%})")
+        print(
+            f"    Msgs delivered: {result.messages_delivered} ({result.delivery_rate:.1%})"
+        )
         avg_rt = result.average_decision_time
-        print(f"    Avg resp time:  {avg_rt:.1f}s" if avg_rt else "    Avg resp time:  N/A")
+        print(
+            f"    Avg resp time:  {avg_rt:.1f}s"
+            if avg_rt
+            else "    Avg resp time:  N/A"
+        )
 
 
 # ============================================================================
 # Part 6: Connectivity Inversion Check
 # ============================================================================
+
 
 def diagnose_connectivity_inversion(config: SimulationConfig, seed: int = 42) -> None:
     header("PART 6: CONNECTIVITY LEVEL INVERSION CHECK")
@@ -635,18 +689,26 @@ def diagnose_connectivity_inversion(config: SimulationConfig, seed: int = 42) ->
         result = engine.run()
 
         print(f"\n  Connectivity={conn:.2f}:")
-        print(f"    Tasks: {result.total_tasks}, "
-              f"Assigned: {result.tasks_assigned} ({result.assignment_rate:.1%})")
-        print(f"    Messages: {result.messages_created}, "
-              f"Delivered: {result.messages_delivered} ({result.delivery_rate:.1%})")
+        print(
+            f"    Tasks: {result.total_tasks}, "
+            f"Assigned: {result.tasks_assigned} ({result.assignment_rate:.1%})"
+        )
+        print(
+            f"    Messages: {result.messages_created}, "
+            f"Delivered: {result.messages_delivered} ({result.delivery_rate:.1%})"
+        )
         avg_dt = result.average_delivery_time
-        print(f"    Avg delivery time: {avg_dt:.1f}s" if avg_dt else
-              "    Avg delivery time: N/A")
+        print(
+            f"    Avg delivery time: {avg_dt:.1f}s"
+            if avg_dt
+            else "    Avg delivery time: N/A"
+        )
 
 
 # ============================================================================
 # Part 7: Root Cause Summary
 # ============================================================================
+
 
 def print_root_cause_summary() -> None:
     header("SUSPECTED ROOT CAUSES")
@@ -689,21 +751,28 @@ def print_root_cause_summary() -> None:
 # Main
 # ============================================================================
 
+
 def main():
     config = SimulationConfig()
     seed = 42
 
-    print(f"ERCS Mobility + PRoPHET Diagnostic")
-    print(f"Config: warmup={config.scenario.warmup_period_seconds}s, "
-          f"duration={config.scenario.simulation_duration_seconds}s, "
-          f"total={config.total_simulation_duration}s")
-    print(f"PRoPHETv2: P_enc_max={config.communication.prophet.p_enc_max}, "
-          f"I_typ={config.communication.prophet.i_typ}, "
-          f"β={config.communication.prophet.beta}, "
-          f"γ={config.communication.prophet.gamma}, "
-          f"update_interval={config.communication.update_interval_seconds}s")
-    print(f"Network: {config.network.mobile_responder_count} mobile nodes, "
-          f"radio_range={config.network.radio_range_m}m")
+    print("ERCS Mobility + PRoPHET Diagnostic")
+    print(
+        f"Config: warmup={config.scenario.warmup_period_seconds}s, "
+        f"duration={config.scenario.simulation_duration_seconds}s, "
+        f"total={config.total_simulation_duration}s"
+    )
+    print(
+        f"PRoPHETv2: P_enc_max={config.communication.prophet.p_enc_max}, "
+        f"I_typ={config.communication.prophet.i_typ}, "
+        f"β={config.communication.prophet.beta}, "
+        f"γ={config.communication.prophet.gamma}, "
+        f"update_interval={config.communication.update_interval_seconds}s"
+    )
+    print(
+        f"Network: {config.network.mobile_responder_count} mobile nodes, "
+        f"radio_range={config.network.radio_range_m}m"
+    )
     print(f"Mobility: {config.network.mobility_model.value}")
 
     diagnose_roles_and_mobility(config, seed)

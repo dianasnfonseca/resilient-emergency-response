@@ -15,26 +15,6 @@ Tests cover:
 import json
 
 import pytest
-
-from ercs.config.parameters import (
-    AlgorithmType,
-    CoordinationParameters,
-    NetworkParameters,
-    ScenarioParameters,
-    SimulationConfig,
-    UrgencyLevel,
-)
-from ercs.simulation import (
-    ExperimentRunner,
-    SimulationEngine,
-    SimulationEvent,
-    SimulationEventType,
-    SimulationResults,
-    TopologyAdapter,
-    run_experiment,
-    run_simulation,
-)
-
 from conftest import (
     CONNECTIVITY_MILD,
     CONNECTIVITY_MODERATE,
@@ -46,6 +26,23 @@ from conftest import (
     RUNS_PER_CONFIG,
     SIMULATION_DURATION_S,
     TOTAL_EXPERIMENTAL_RUNS,
+)
+
+from ercs.config.parameters import (
+    AlgorithmType,
+    CoordinationParameters,
+    NetworkParameters,
+    ScenarioParameters,
+    SimulationConfig,
+)
+from ercs.simulation import (
+    ExperimentRunner,
+    SimulationEngine,
+    SimulationEvent,
+    SimulationEventType,
+    SimulationResults,
+    TopologyAdapter,
+    run_simulation,
 )
 
 # =============================================================================
@@ -898,9 +895,7 @@ class TestSeedValidation:
         import sys
         from pathlib import Path
 
-        sys.path.insert(
-            0, str(Path(__file__).resolve().parent.parent / "scripts")
-        )
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
         # Import validation function inline (it's a script, not a package)
         from validate_seeds import validate_seed
@@ -910,21 +905,22 @@ class TestSeedValidation:
         assert validate_seed(seed=1, connectivity_level=0.75, config=config) is True
 
     def test_valid_seeds_loaded_by_runner(self):
-        """ExperimentRunner should load seeds from config/valid_seeds.json."""
+        """ExperimentRunner should load seeds from configs/valid_seeds.json."""
         import json
-        from pathlib import Path
 
         seeds_path = ExperimentRunner._VALID_SEEDS_PATH
 
         if not seeds_path.exists():
-            pytest.skip("config/valid_seeds.json not found — run scripts/validate_seeds.py first")
+            pytest.skip(
+                "configs/valid_seeds.json not found — run scripts/validate_seeds.py first"
+            )
 
         runner = ExperimentRunner(use_valid_seeds=True)
         assert runner._valid_seeds is not None
         assert len(runner._valid_seeds) > 0
 
         # Verify seeds match the file
-        with open(seeds_path) as f:
+        with seeds_path.open() as f:
             data = json.load(f)
         expected = [int(s) for s in data["valid_seeds"]]
         assert runner._valid_seeds == expected
@@ -951,9 +947,7 @@ class TestSeedValidation:
         seeds_file = tmp_path / "valid_seeds.json"
         seeds_file.write_text(json.dumps({"valid_seeds": [10, 20, 30, 40, 50]}))
 
-        monkeypatch.setattr(
-            ExperimentRunner, "_VALID_SEEDS_PATH", seeds_file
-        )
+        monkeypatch.setattr(ExperimentRunner, "_VALID_SEEDS_PATH", seeds_file)
 
         runner = ExperimentRunner(base_seed=42, use_valid_seeds=True)
         seeds = runner._get_seeds(3)

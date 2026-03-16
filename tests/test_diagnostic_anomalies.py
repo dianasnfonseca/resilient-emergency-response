@@ -31,15 +31,10 @@ from ercs.config.parameters import (
 )
 from ercs.coordination.algorithms import (
     AdaptiveCoordinator,
-    Assignment,
     BaselineCoordinator,
-    CoordinationManager,
-    NetworkStateProvider,
-    ResponderLocator,
 )
 from ercs.scenario.generator import Task, TaskStatus
 from ercs.simulation.engine import SimulationEngine, SimulationResults
-
 
 # ============================================================================
 # Helpers: lightweight stubs for coordinator protocols
@@ -116,9 +111,7 @@ class TestAssignmentRateSemantics:
         # 5 responders, all with P > 0 from coord_0
         positions = {f"r_{i}": (100.0 * i, 100.0) for i in range(5)}
         locator = StubResponderLocator(positions)
-        net = StubNetworkState({
-            ("coord_0", f"r_{i}"): 0.1 + i * 0.1 for i in range(5)
-        })
+        net = StubNetworkState({("coord_0", f"r_{i}"): 0.1 + i * 0.1 for i in range(5)})
 
         tasks = [_make_task(f"t_{i}", i * 10.0) for i in range(5)]
 
@@ -145,13 +138,15 @@ class TestAssignmentRateSemantics:
         locator = StubResponderLocator(positions)
 
         # Only r_3 and r_4 have P > 0.3
-        net = StubNetworkState({
-            ("coord_0", "r_0"): 0.05,
-            ("coord_0", "r_1"): 0.1,
-            ("coord_0", "r_2"): 0.2,
-            ("coord_0", "r_3"): 0.4,
-            ("coord_0", "r_4"): 0.5,
-        })
+        net = StubNetworkState(
+            {
+                ("coord_0", "r_0"): 0.05,
+                ("coord_0", "r_1"): 0.1,
+                ("coord_0", "r_2"): 0.2,
+                ("coord_0", "r_3"): 0.4,
+                ("coord_0", "r_4"): 0.5,
+            }
+        )
 
         tasks = [_make_task(f"t_{i}", i * 10.0) for i in range(5)]
 
@@ -433,11 +428,13 @@ class TestProphetStateIndependence:
         locator = StubResponderLocator(positions)
 
         # Network state: r_0 has highest P, r_1 has lowest (but above threshold)
-        net = StubNetworkState({
-            ("coord_0", "r_0"): 0.8,
-            ("coord_0", "r_1"): 0.35,
-            ("coord_0", "r_2"): 0.4,
-        })
+        net = StubNetworkState(
+            {
+                ("coord_0", "r_0"): 0.8,
+                ("coord_0", "r_1"): 0.35,
+                ("coord_0", "r_2"): 0.4,
+            }
+        )
 
         task = _make_task("t_0", 10.0, x=100.0, y=100.0)
 
@@ -497,21 +494,21 @@ class TestAdaptiveGeographicClustering:
         task = _make_task("t_0", 10.0, x=100.0, y=100.0)
 
         positions = {
-            "r_close": (110.0, 110.0),   # ~14m from task
-            "r_far": (800.0, 700.0),     # ~860m from task
+            "r_close": (110.0, 110.0),  # ~14m from task
+            "r_far": (800.0, 700.0),  # ~860m from task
         }
         locator = StubResponderLocator(positions)
 
         # r_close below threshold, r_far above
-        net = StubNetworkState({
-            ("coord_0", "r_close"): 0.05,  # Below 0.3 → excluded
-            ("coord_0", "r_far"): 0.9,     # Above threshold
-        })
+        net = StubNetworkState(
+            {
+                ("coord_0", "r_close"): 0.05,  # Below 0.3 → excluded
+                ("coord_0", "r_far"): 0.9,  # Above threshold
+            }
+        )
 
         coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            [task], locator, net, "coord_0", 100.0
-        )
+        assignments = coord.assign_tasks([task], locator, net, "coord_0", 100.0)
 
         assert len(assignments) == 1
         # r_close excluded by threshold, only r_far is a candidate
@@ -528,23 +525,23 @@ class TestAdaptiveGeographicClustering:
         task = _make_task("t_0", 10.0, x=300.0, y=300.0)
 
         positions = {
-            "r_close": (320.0, 310.0),    # ~22m from task
+            "r_close": (320.0, 310.0),  # ~22m from task
             "r_moderate": (400.0, 350.0),  # ~112m from task
-            "r_far": (600.0, 500.0),       # ~361m from task
+            "r_far": (600.0, 500.0),  # ~361m from task
         }
         locator = StubResponderLocator(positions)
 
         # All above 0.3 threshold; static α=0.2, γ_r=0.2, β=0.6
-        net = StubNetworkState({
-            ("coord_0", "r_close"): 0.32,
-            ("coord_0", "r_moderate"): 0.37,
-            ("coord_0", "r_far"): 0.42,
-        })
+        net = StubNetworkState(
+            {
+                ("coord_0", "r_close"): 0.32,
+                ("coord_0", "r_moderate"): 0.37,
+                ("coord_0", "r_far"): 0.42,
+            }
+        )
 
         coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            [task], locator, net, "coord_0", 100.0
-        )
+        assignments = coord.assign_tasks([task], locator, net, "coord_0", 100.0)
 
         assigned = assignments[0].responder_id
 
@@ -560,23 +557,23 @@ class TestAdaptiveGeographicClustering:
         task = _make_task("t_0", 10.0, x=100.0, y=100.0)
 
         positions = {
-            "r_0": (110.0, 110.0),   # Closest
+            "r_0": (110.0, 110.0),  # Closest
             "r_1": (300.0, 300.0),
-            "r_2": (500.0, 500.0),   # Farthest
+            "r_2": (500.0, 500.0),  # Farthest
         }
         locator = StubResponderLocator(positions)
 
         # All same P above threshold → distance is the tiebreaker
-        net = StubNetworkState({
-            ("coord_0", "r_0"): 0.40,
-            ("coord_0", "r_1"): 0.40,
-            ("coord_0", "r_2"): 0.40,
-        })
+        net = StubNetworkState(
+            {
+                ("coord_0", "r_0"): 0.40,
+                ("coord_0", "r_1"): 0.40,
+                ("coord_0", "r_2"): 0.40,
+            }
+        )
 
         coord = AdaptiveCoordinator()
-        assignments = coord.assign_tasks(
-            [task], locator, net, "coord_0", 100.0
-        )
+        assignments = coord.assign_tasks([task], locator, net, "coord_0", 100.0)
 
         # With equal P, closest wins
         assert assignments[0].responder_id == "r_0"
@@ -590,7 +587,8 @@ class TestAdaptiveGeographicClustering:
         rng = np.random.default_rng(42)
         tasks_adaptive = [
             _make_task(
-                f"t_{i}", i * 30.0,
+                f"t_{i}",
+                i * 30.0,
                 x=rng.uniform(0, 700),
                 y=rng.uniform(450, 1050),
             )
@@ -599,7 +597,8 @@ class TestAdaptiveGeographicClustering:
         # Clone for baseline (reset state)
         tasks_baseline = [
             _make_task(
-                f"t_{i}", i * 30.0,
+                f"t_{i}",
+                i * 30.0,
                 x=tasks_adaptive[i].target_location_x,
                 y=tasks_adaptive[i].target_location_y,
             )
@@ -620,16 +619,18 @@ class TestAdaptiveGeographicClustering:
         locator = StubResponderLocator(positions)
 
         # All nodes above threshold; coord-zone nodes have slightly higher P
-        net = StubNetworkState({
-            ("coord_0", "r_0"): 0.35,
-            ("coord_0", "r_1"): 0.36,
-            ("coord_0", "r_2"): 0.34,
-            ("coord_0", "r_3"): 0.33,
-            ("coord_0", "r_4"): 0.38,
-            ("coord_0", "r_5"): 0.37,
-            ("coord_0", "r_6"): 0.45,  # High P — near coord
-            ("coord_0", "r_7"): 0.50,  # Highest P — near coord
-        })
+        net = StubNetworkState(
+            {
+                ("coord_0", "r_0"): 0.35,
+                ("coord_0", "r_1"): 0.36,
+                ("coord_0", "r_2"): 0.34,
+                ("coord_0", "r_3"): 0.33,
+                ("coord_0", "r_4"): 0.38,
+                ("coord_0", "r_5"): 0.37,
+                ("coord_0", "r_6"): 0.45,  # High P — near coord
+                ("coord_0", "r_7"): 0.50,  # Highest P — near coord
+            }
+        )
 
         # Adaptive assignments
         adaptive = AdaptiveCoordinator()
@@ -647,7 +648,7 @@ class TestAdaptiveGeographicClustering:
         baseline_responders = [a.responder_id for a in baseline_assignments]
         baseline_unique = set(baseline_responders)
 
-        print(f"\n--- Assignment Distribution Diagnostic (post-fix) ---")
+        print("\n--- Assignment Distribution Diagnostic (post-fix) ---")
         print(f"Adaptive unique responders: {len(adaptive_unique)} / {len(positions)}")
         print(f"  Assignments: {adaptive_responders}")
         print(f"Baseline unique responders: {len(baseline_unique)} / {len(positions)}")
@@ -722,16 +723,22 @@ class TestForwardingBehavior:
 
         # Adaptive would assign to r_3 (high P from coord to r_3)
         # Message: coord_0 → r_3 — direct delivery if r_3 is destination
-        msg_adaptive = comm.create_message(
-            "coord_0", "r_3", MessageType.COORDINATION,
-            {"task": "test"}, 100.0,
+        comm.create_message(
+            "coord_0",
+            "r_3",
+            MessageType.COORDINATION,
+            {"task": "test"},
+            100.0,
         )
 
         # Baseline would assign to nearest, say r_1
         # Message: coord_0 → r_1 — needs forwarding via network
-        msg_baseline = comm.create_message(
-            "coord_0", "r_1", MessageType.COORDINATION,
-            {"task": "test"}, 100.0,
+        comm.create_message(
+            "coord_0",
+            "r_1",
+            MessageType.COORDINATION,
+            {"task": "test"},
+            100.0,
         )
 
         # Check: for the adaptive message, coord_0 sends to r_3
@@ -764,14 +771,12 @@ class TestForwardingBehavior:
 
         # Number of potential forwarders to well-connected node
         forwarders_well = sum(
-            1 for n in ["n0", "n1", "n2"]
-            if matrix.get_predictability(n, "r_well") > 0
+            1 for n in ["n0", "n1", "n2"] if matrix.get_predictability(n, "r_well") > 0
         )
 
         # Number of potential forwarders to poorly-connected node
         forwarders_poor = sum(
-            1 for n in ["n0", "n1", "n2"]
-            if matrix.get_predictability(n, "r_poor") > 0
+            1 for n in ["n0", "n1", "n2"] if matrix.get_predictability(n, "r_poor") > 0
         )
 
         assert forwarders_well == 3
@@ -851,16 +856,20 @@ class TestMicroSimulationDiagnostic:
         ).run()
 
         print(f"\n--- Micro-Simulation Diagnostic (seed={seed}) ---")
-        print(f"Adaptive: tasks={result_a.total_tasks}, "
-              f"assigned={result_a.tasks_assigned}, "
-              f"msgs_created={result_a.messages_created}, "
-              f"delivered={result_a.messages_delivered}, "
-              f"delivery_rate={result_a.delivery_rate:.3f}")
-        print(f"Baseline: tasks={result_b.total_tasks}, "
-              f"assigned={result_b.tasks_assigned}, "
-              f"msgs_created={result_b.messages_created}, "
-              f"delivered={result_b.messages_delivered}, "
-              f"delivery_rate={result_b.delivery_rate:.3f}")
+        print(
+            f"Adaptive: tasks={result_a.total_tasks}, "
+            f"assigned={result_a.tasks_assigned}, "
+            f"msgs_created={result_a.messages_created}, "
+            f"delivered={result_a.messages_delivered}, "
+            f"delivery_rate={result_a.delivery_rate:.3f}"
+        )
+        print(
+            f"Baseline: tasks={result_b.total_tasks}, "
+            f"assigned={result_b.tasks_assigned}, "
+            f"msgs_created={result_b.messages_created}, "
+            f"delivered={result_b.messages_delivered}, "
+            f"delivery_rate={result_b.delivery_rate:.3f}"
+        )
 
         # We can't predict which is higher without running, but we verify
         # both produce valid results
@@ -889,11 +898,15 @@ class TestMicroSimulationDiagnostic:
             random_seed=seed,
         ).run()
 
-        print(f"\n--- Connectivity Impact Diagnostic ---")
-        print(f"75% connectivity: assignment_rate={result_high.assignment_rate:.3f}, "
-              f"delivery_rate={result_high.delivery_rate:.3f}")
-        print(f"20% connectivity: assignment_rate={result_low.assignment_rate:.3f}, "
-              f"delivery_rate={result_low.delivery_rate:.3f}")
+        print("\n--- Connectivity Impact Diagnostic ---")
+        print(
+            f"75% connectivity: assignment_rate={result_high.assignment_rate:.3f}, "
+            f"delivery_rate={result_high.delivery_rate:.3f}"
+        )
+        print(
+            f"20% connectivity: assignment_rate={result_low.assignment_rate:.3f}, "
+            f"delivery_rate={result_low.delivery_rate:.3f}"
+        )
 
         # With cold-start, assignment rate depends on encounter history
         # Delivery rate should decrease with lower connectivity

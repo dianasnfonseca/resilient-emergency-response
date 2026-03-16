@@ -13,7 +13,6 @@ Prints the diagnostic report from TASK 7 of the implementation prompt.
 
 import json
 import sys
-from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 
@@ -23,14 +22,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from ercs.config.parameters import AlgorithmType, SimulationConfig
 from ercs.simulation.engine import SimulationEngine
 
-
 # Load a single valid seed
-VALID_SEEDS_PATH = Path(__file__).resolve().parent.parent / "config" / "valid_seeds.json"
+VALID_SEEDS_PATH = (
+    Path(__file__).resolve().parent.parent / "configs" / "valid_seeds.json"
+)
 
 
 def _get_seed() -> int:
     if VALID_SEEDS_PATH.exists():
-        with open(VALID_SEEDS_PATH) as f:
+        with VALID_SEEDS_PATH.open() as f:
             data = json.load(f)
         seeds = [int(s) for s in data.get("valid_seeds", [])]
         if seeds:
@@ -51,7 +51,7 @@ def run_single(algorithm: AlgorithmType, connectivity: float, seed: int) -> dict
 
     # Extract coordinator events for recency analysis
     events = []
-    if hasattr(engine, '_coordinator') and engine._coordinator is not None:
+    if hasattr(engine, "_coordinator") and engine._coordinator is not None:
         coord_events = engine._coordinator.get_events()
         for ev in coord_events:
             if ev.event_type.value == "task_assigned":
@@ -64,11 +64,12 @@ def run_single(algorithm: AlgorithmType, connectivity: float, seed: int) -> dict
 
     # Extract last encounter times at ~hour 2 from the adapter
     last_enc_data = {}
-    if hasattr(engine, '_adapter') and engine._adapter is not None:
+    if hasattr(engine, "_adapter") and engine._adapter is not None:
         adapter = engine._adapter
         responder_ids = adapter.get_all_responder_ids()
         coord_nodes = [
-            nid for nid in engine._topology.get_all_node_ids()
+            nid
+            for nid in engine._topology.get_all_node_ids()
             if nid.startswith("coord_")
         ]
         if coord_nodes:
@@ -93,7 +94,7 @@ def main() -> None:
     seed = _get_seed()
     connectivity_levels = [0.75, 0.40, 0.20]
 
-    print(f"=== ENCOUNTER RECENCY DIAGNOSTIC ===")
+    print("=== ENCOUNTER RECENCY DIAGNOSTIC ===")
     print(f"Seed: {seed}\n")
 
     # Run all configs
@@ -103,46 +104,54 @@ def main() -> None:
             print(f"  Running {algo.value:>8s} @ {conn:.2f}...", end="", flush=True)
             r = run_single(algo, conn, seed)
             results[(algo.value, conn)] = r
-            print(f" del_rate={r['delivery_rate']:.3f}, "
-                  f"tasks={r['total_tasks']}, "
-                  f"assigned={r['tasks_assigned']}")
+            print(
+                f" del_rate={r['delivery_rate']:.3f}, "
+                f"tasks={r['total_tasks']}, "
+                f"assigned={r['tasks_assigned']}"
+            )
 
     print()
 
     # ── Per-connectivity analysis ────────────────────────────────────────
-    all_pass = True
 
     for conn in connectivity_levels:
         adap = results[("adaptive", conn)]
         base = results[("baseline", conn)]
 
         # R_norm statistics from adaptive assignment events
-        recency_values = [e.get("recency", 0.0) for e in adap["events"] if "recency" in e]
+        recency_values = [
+            e.get("recency", 0.0) for e in adap["events"] if "recency" in e
+        ]
         r_mean = mean(recency_values) if recency_values else 0.0
         r_std = stdev(recency_values) if len(recency_values) > 1 else 0.0
 
         # Assignments that differ from baseline
         adap_assignments = {
-            e.get("task_id"): e.get("responder_id") for e in adap["events"]
+            e.get("task_id"): e.get("responder_id")
+            for e in adap["events"]
             if "task_id" in e and "responder_id" in e
         }
         base_assignments = {
-            e.get("task_id"): e.get("responder_id") for e in base["events"]
+            e.get("task_id"): e.get("responder_id")
+            for e in base["events"]
             if "task_id" in e and "responder_id" in e
         }
 
         common_tasks = set(adap_assignments) & set(base_assignments)
         differing = sum(
-            1 for tid in common_tasks
-            if adap_assignments[tid] != base_assignments[tid]
+            1 for tid in common_tasks if adap_assignments[tid] != base_assignments[tid]
         )
         diff_pct = (differing / len(common_tasks) * 100) if common_tasks else 0.0
 
         print(f"Connectivity: {int(conn * 100)}%")
         print(f"  Mean R_norm across assignments: {r_mean:.3f}")
         print(f"  Std R_norm across assignments:  {r_std:.3f}")
-        print(f"  Assignments differing from Baseline: {differing} / {len(common_tasks)} ({diff_pct:.1f}%)")
-        print(f"  Delivery rate — Adaptive: {adap['delivery_rate']:.3f}, Baseline: {base['delivery_rate']:.3f}")
+        print(
+            f"  Assignments differing from Baseline: {differing} / {len(common_tasks)} ({diff_pct:.1f}%)"
+        )
+        print(
+            f"  Delivery rate — Adaptive: {adap['delivery_rate']:.3f}, Baseline: {base['delivery_rate']:.3f}"
+        )
         print()
 
     # ── Last encounter time distribution at end of simulation ──────────
@@ -154,8 +163,10 @@ def main() -> None:
         total_resp = len(enc_times)
         pct_encountered = nonzero / total_resp * 100
 
-        print(f"R_norm distribution at simulation end (75% connectivity, sample):")
-        print(f"  {'Responder':<12} {'last_enc(s)':>12} {'delta_t(s)':>12} {'R_norm':>8}")
+        print("R_norm distribution at simulation end (75% connectivity, sample):")
+        print(
+            f"  {'Responder':<12} {'last_enc(s)':>12} {'delta_t(s)':>12} {'R_norm':>8}"
+        )
 
         # Get the total simulation time
         config = SimulationConfig()
@@ -169,7 +180,9 @@ def main() -> None:
             r_norm = 1.0 - min(delta_t / T_REF, 1.0)
             print(f"  {rid:<12} {last_enc:>12.0f} {delta_t:>12.0f} {r_norm:>8.3f}")
 
-        print(f"\n  Responders with last_enc > 0: {nonzero}/{total_resp} ({pct_encountered:.0f}%)")
+        print(
+            f"\n  Responders with last_enc > 0: {nonzero}/{total_resp} ({pct_encountered:.0f}%)"
+        )
     else:
         pct_encountered = 0.0
         print("  No last_encounter_time data available.")
@@ -186,7 +199,9 @@ def main() -> None:
 
     check1 = any(s > 0.05 for s in r_stds.values())
     stds_str = ", ".join(f"{int(c*100)}%={s:.3f}" for c, s in r_stds.items())
-    print(f"  1. std(R_norm) > 0.05 in at least one level: {'PASS' if check1 else 'FAIL'}")
+    print(
+        f"  1. std(R_norm) > 0.05 in at least one level: {'PASS' if check1 else 'FAIL'}"
+    )
     print(f"     Values: {stds_str}")
 
     # Check 2: >= 5% assignments differ at 75% or 40%
@@ -194,17 +209,25 @@ def main() -> None:
     for conn in [0.75, 0.40]:
         adap = results[("adaptive", conn)]
         base = results[("baseline", conn)]
-        aa = {e.get("task_id"): e.get("responder_id") for e in adap["events"]
-              if "task_id" in e and "responder_id" in e}
-        ba = {e.get("task_id"): e.get("responder_id") for e in base["events"]
-              if "task_id" in e and "responder_id" in e}
+        aa = {
+            e.get("task_id"): e.get("responder_id")
+            for e in adap["events"]
+            if "task_id" in e and "responder_id" in e
+        }
+        ba = {
+            e.get("task_id"): e.get("responder_id")
+            for e in base["events"]
+            if "task_id" in e and "responder_id" in e
+        }
         ct = set(aa) & set(ba)
         d = sum(1 for tid in ct if aa[tid] != ba[tid])
         diff_pcts[conn] = (d / len(ct) * 100) if ct else 0.0
 
     check2 = any(p >= 5.0 for p in diff_pcts.values())
     pcts_str = ", ".join(f"{int(c*100)}%={p:.1f}%" for c, p in diff_pcts.items())
-    print(f"  2. >= 5% assignments differ from Baseline: {'PASS' if check2 else 'FAIL'}")
+    print(
+        f"  2. >= 5% assignments differ from Baseline: {'PASS' if check2 else 'FAIL'}"
+    )
     print(f"     Values: {pcts_str}")
 
     # Check 3: Delivery rate >= 0.80 at all levels
@@ -235,7 +258,7 @@ def main() -> None:
             failed.append("assignments not differing from Baseline")
         if not check3:
             failed.append("delivery rate regression")
-        print(f"Differentiation verdict: FAIL")
+        print("Differentiation verdict: FAIL")
         print(f"  Reasons: {'; '.join(failed)}")
 
 

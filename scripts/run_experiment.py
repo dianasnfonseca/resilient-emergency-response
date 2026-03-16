@@ -36,18 +36,20 @@ def print_experiment_plan(config: ExperimentConfig) -> None:
     if config.description:
         print(f"Description: {config.description}")
 
-    print(f"\nAlgorithms:")
+    print("\nAlgorithms:")
     for alg in config.enabled_algorithms:
         print(f"  - {alg.value}")
 
-    print(f"\nConnectivity scenarios:")
+    print("\nConnectivity scenarios:")
     for scenario in config.connectivity_scenarios:
         print(f"  - {scenario.connectivity_level * 100:.0f}%: {scenario.num_runs} runs")
 
     print(f"\nTotal runs: {config.total_runs}")
-    print(f"  = {len(config.enabled_algorithms)} algorithms × {len(config.connectivity_scenarios)} scenarios × {config.connectivity_scenarios[0].num_runs} runs")
+    print(
+        f"  = {len(config.enabled_algorithms)} algorithms × {len(config.connectivity_scenarios)} scenarios × {config.connectivity_scenarios[0].num_runs} runs"
+    )
 
-    print(f"\nKey parameters:")
+    print("\nKey parameters:")
     print(f"  Nodes: {config.network.primary_node_count}")
     print(f"  Duration: {config.scenario.simulation_duration_seconds}s")
     print(f"  Coordination interval: {config.coordination.update_interval_seconds}s")
@@ -58,7 +60,9 @@ def print_experiment_plan(config: ExperimentConfig) -> None:
 def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Run ERCS experiments")
-    parser.add_argument("--config", "-c", type=Path, default=Path("configs/default.yaml"))
+    parser.add_argument(
+        "--config", "-c", type=Path, default=Path("configs/default.yaml")
+    )
     parser.add_argument("--dry-run", "-n", action="store_true")
     parser.add_argument("--verbose", "-v", action="store_true")
     args = parser.parse_args()

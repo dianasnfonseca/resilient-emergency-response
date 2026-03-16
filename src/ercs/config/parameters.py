@@ -10,7 +10,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # =============================================================================
 # Enumerations
 # =============================================================================
@@ -70,9 +69,9 @@ class ResponderRole(str, Enum):
 
     """
 
-    RESCUE = "rescue"        # ~60% — localised in incident zone
+    RESCUE = "rescue"  # ~60% — localised in incident zone
     TRANSPORT = "transport"  # ~25% — shuttle between incident and coordination zones
-    LIAISON = "liaison"      # ~15% — free movement across entire area
+    LIAISON = "liaison"  # ~15% — free movement across entire area
 
 
 # =============================================================================
@@ -501,7 +500,7 @@ class CoordinationParameters(BaseModel):
         default=0.2,
         ge=0,
         le=1,
-        description="α — predictability weight in scoring formula. "
+        description="α — predictability weight in scoring formula. ",
     )
 
     recency_weight: float = Field(
@@ -513,10 +512,7 @@ class CoordinationParameters(BaseModel):
     )
 
     proximity_weight: float = Field(
-        default=0.6,
-        ge=0,
-        le=1,
-        description="β — proximity weight in scoring formula. "
+        default=0.6, ge=0, le=1, description="β — proximity weight in scoring formula. "
     )
 
     workload_penalty_weight: float = Field(
@@ -524,7 +520,7 @@ class CoordinationParameters(BaseModel):
         ge=0,
         le=1,
         description="λ — workload penalty weight. Discourages re-assigning the "
-        "same responder across consecutive coordination cycles. "
+        "same responder across consecutive coordination cycles. ",
     )
 
     recency_reference_seconds: float = Field(
@@ -605,7 +601,10 @@ class SimulationConfig(BaseModel):
     @property
     def total_simulation_duration(self) -> float:
         """Total duration including warm-up period."""
-        return self.scenario.warmup_period_seconds + self.scenario.simulation_duration_seconds
+        return (
+            self.scenario.warmup_period_seconds
+            + self.scenario.simulation_duration_seconds
+        )
 
     @property
     def total_experimental_runs(self) -> int:
@@ -618,12 +617,15 @@ class SimulationConfig(BaseModel):
     @property
     def total_nodes(self) -> int:
         """Total node count."""
-        return self.network.coordination_node_count + self.network.mobile_responder_count
+        return (
+            self.network.coordination_node_count + self.network.mobile_responder_count
+        )
 
     @property
     def simulation_area_diagonal_m(self) -> float:
         """Diagonal of the simulation area (metres), for distance normalisation."""
         import math
+
         w = self.network.simulation_area.width_m
         h = self.network.simulation_area.height_m
         return math.sqrt(w * w + h * h)

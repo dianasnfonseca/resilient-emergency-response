@@ -17,6 +17,13 @@ Factory Functions:
 
 """
 
+from ercs.network.mobility import (
+    MobileNodeState,
+    MobilityManager,
+    MobilityState,
+    Waypoint,
+    calculate_encounters,
+)
 from ercs.network.topology import (
     NetworkTopology,
     Node,
@@ -25,23 +32,15 @@ from ercs.network.topology import (
     generate_topology,
 )
 
-from ercs.network.mobility import (
-    MobilityManager,
-    MobileNodeState,
-    MobilityState,
-    Waypoint,
-    calculate_encounters,
-)
-
 __all__ = [
+    "MobileNodeState",
+    "MobilityManager",
+    "MobilityState",
     "NetworkTopology",
     "Node",
     "NodeType",
     "TopologyGenerator",
-    "generate_topology",
-    "MobilityManager",
-    "MobileNodeState",
-    "MobilityState",
     "Waypoint",
     "calculate_encounters",
+    "generate_topology",
 ]

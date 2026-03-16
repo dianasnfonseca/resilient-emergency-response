@@ -18,9 +18,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from ercs.communication.prophet import CommunicationLayer, TransmissionResult
 from ercs.config.parameters import AlgorithmType, SimulationConfig
-from ercs.simulation.engine import SimulationEngine, SimulationEventType
+from ercs.simulation.engine import SimulationEngine
 
 
 def header(title: str) -> None:
@@ -37,6 +36,7 @@ def subheader(title: str) -> None:
 # Instrumented Engine
 # ============================================================================
 
+
 class DeliveryTracer(SimulationEngine):
     """Engine that traces every encounter and transfer call."""
 
@@ -44,9 +44,9 @@ class DeliveryTracer(SimulationEngine):
         super().__init__(*args, **kwargs)
         # Track per-call data
         self.encounter_calls = []  # (time, source, node_a, node_b, n_results)
-        self.transfer_calls = []   # (time, source, node_a, node_b, n_results)
+        self.transfer_calls = []  # (time, source, node_a, node_b, n_results)
         # Track forwarding events
-        self.forward_events = []   # (time, msg_id, from, to, reason)
+        self.forward_events = []  # (time, msg_id, from, to, reason)
         # Track message copies in buffers
         self.buffer_snapshots = []  # (time, {msg_id: count_in_buffers})
 
@@ -80,7 +80,8 @@ class DeliveryTracer(SimulationEngine):
                     current_time=event.timestamp,
                 )
                 self.encounter_calls.append(
-                    (event.timestamp, "mobility", node_a, node_b, len(delivered)))
+                    (event.timestamp, "mobility", node_a, node_b, len(delivered))
+                )
                 self._trace_results(delivered, event.timestamp)
             else:
                 delivered = self._communication.transfer_messages(
@@ -89,7 +90,8 @@ class DeliveryTracer(SimulationEngine):
                     current_time=event.timestamp,
                 )
                 self.transfer_calls.append(
-                    (event.timestamp, "mobility", node_a, node_b, len(delivered)))
+                    (event.timestamp, "mobility", node_a, node_b, len(delivered))
+                )
                 self._trace_results(delivered, event.timestamp)
 
             self._process_delivered_messages(delivered, event.timestamp, results)
@@ -113,7 +115,8 @@ class DeliveryTracer(SimulationEngine):
                 current_time=event.timestamp,
             )
             self.encounter_calls.append(
-                (event.timestamp, "periodic_new", node_a, node_b, len(delivered)))
+                (event.timestamp, "periodic_new", node_a, node_b, len(delivered))
+            )
             self._trace_results(delivered, event.timestamp)
             self._process_delivered_messages(delivered, event.timestamp, results)
 
@@ -124,7 +127,8 @@ class DeliveryTracer(SimulationEngine):
                 current_time=event.timestamp,
             )
             self.transfer_calls.append(
-                (event.timestamp, "periodic_existing", node_a, node_b, len(delivered)))
+                (event.timestamp, "periodic_existing", node_a, node_b, len(delivered))
+            )
             self._trace_results(delivered, event.timestamp)
             self._process_delivered_messages(delivered, event.timestamp, results)
 
@@ -140,13 +144,15 @@ class DeliveryTracer(SimulationEngine):
     def _trace_results(self, results, timestamp):
         """Record forwarding events."""
         for r in results:
-            self.forward_events.append((
-                timestamp,
-                r.message.message_id,
-                r.source_node,
-                r.target_node,
-                r.reason,
-            ))
+            self.forward_events.append(
+                (
+                    timestamp,
+                    r.message.message_id,
+                    r.source_node,
+                    r.target_node,
+                    r.reason,
+                )
+            )
 
     def _snapshot_buffers(self, timestamp):
         """Count copies of each message across all buffers."""
@@ -161,6 +167,7 @@ class DeliveryTracer(SimulationEngine):
 # Diagnostics
 # ============================================================================
 
+
 def diagnose_encounter_vs_transfer(engine: DeliveryTracer) -> None:
     header("PART 1: ENCOUNTER vs TRANSFER CALL ANALYSIS")
 
@@ -168,11 +175,11 @@ def diagnose_encounter_vs_transfer(engine: DeliveryTracer) -> None:
     tr_by_source = Counter(src for _, src, _, _, _ in engine.transfer_calls)
 
     subheader("1a. Call Counts by Source")
-    print(f"  process_encounter() calls:")
+    print("  process_encounter() calls:")
     for src, count in sorted(enc_by_source.items()):
         print(f"    {src:25s}: {count:6d}")
     print(f"    {'TOTAL':25s}: {len(engine.encounter_calls):6d}")
-    print(f"\n  transfer_messages() calls:")
+    print("\n  transfer_messages() calls:")
     for src, count in sorted(tr_by_source.items()):
         print(f"    {src:25s}: {count:6d}")
     print(f"    {'TOTAL':25s}: {len(engine.transfer_calls):6d}")
@@ -180,21 +187,21 @@ def diagnose_encounter_vs_transfer(engine: DeliveryTracer) -> None:
     # Check for same pair getting both encounter and transfer at same timestamp
     subheader("1b. Double Processing Check (same pair, same timestamp)")
     enc_keys = set()
-    for t, src, a, b, _ in engine.encounter_calls:
+    for t, _src, a, b, _ in engine.encounter_calls:
         pair = (t, min(a, b), max(a, b))
         enc_keys.add(pair)
 
     double_count = 0
-    for t, src, a, b, _ in engine.transfer_calls:
+    for t, _src, a, b, _ in engine.transfer_calls:
         pair = (t, min(a, b), max(a, b))
         if pair in enc_keys:
             double_count += 1
 
     print(f"  Same (time, pair) in BOTH encounter and transfer: {double_count}")
     if double_count > 0:
-        print(f"  *** DOUBLE PROCESSING DETECTED ***")
+        print("  *** DOUBLE PROCESSING DETECTED ***")
     else:
-        print(f"  No double processing — sets are disjoint. OK")
+        print("  No double processing — sets are disjoint. OK")
 
     # Check encounter updates per unique contact episode
     subheader("1c. Encounter Updates per Unique Node Pair")
@@ -206,8 +213,10 @@ def diagnose_encounter_vs_transfer(engine: DeliveryTracer) -> None:
     counts = list(pair_encounter_counts.values())
     if counts:
         print(f"  Unique pairs with encounter updates: {len(counts)}")
-        print(f"  Encounter updates per pair: mean={np.mean(counts):.1f}, "
-              f"median={np.median(counts):.0f}, max={max(counts)}")
+        print(
+            f"  Encounter updates per pair: mean={np.mean(counts):.1f}, "
+            f"median={np.median(counts):.0f}, max={max(counts)}"
+        )
         # Show top pairs
         top = pair_encounter_counts.most_common(5)
         for (a, b), c in top:
@@ -231,16 +240,20 @@ def diagnose_forwarding(engine: DeliveryTracer) -> None:
 
     copy_counts = list(msg_copies.values()) if msg_copies else [0]
     print(f"  Messages that were forwarded at least once: {len(msg_copies)}")
-    print(f"  Forwards per message: mean={np.mean(copy_counts):.1f}, "
-          f"max={max(copy_counts)}")
+    print(
+        f"  Forwards per message: mean={np.mean(copy_counts):.1f}, "
+        f"max={max(copy_counts)}"
+    )
 
     # Copies in buffers from snapshots
     subheader("2b. Message Copies in Buffers Over Time")
     for t, counts in engine.buffer_snapshots:
         if counts:
             vals = list(counts.values())
-            print(f"  t={t:6.0f}s: {len(counts):4d} unique msgs, "
-                  f"copies/msg: mean={np.mean(vals):.1f}, max={max(vals)}")
+            print(
+                f"  t={t:6.0f}s: {len(counts):4d} unique msgs, "
+                f"copies/msg: mean={np.mean(vals):.1f}, max={max(vals)}"
+            )
         else:
             print(f"  t={t:6.0f}s: 0 messages in buffers")
 
@@ -250,15 +263,20 @@ def diagnose_forwarding(engine: DeliveryTracer) -> None:
     for _, msg_id, _, _, reason in engine.forward_events:
         if reason == "delivered":
             # Count forwards for this message
-            n_forwards = sum(1 for _, mid, _, _, r in engine.forward_events
-                            if mid == msg_id and r == "forwarded")
+            n_forwards = sum(
+                1
+                for _, mid, _, _, r in engine.forward_events
+                if mid == msg_id and r == "forwarded"
+            )
             delivery_hops.append(n_forwards)
 
     if delivery_hops:
         print(f"  Delivered messages: {len(delivery_hops)}")
-        print(f"  Hops: mean={np.mean(delivery_hops):.1f}, "
-              f"median={np.median(delivery_hops):.0f}, "
-              f"max={max(delivery_hops)}")
+        print(
+            f"  Hops: mean={np.mean(delivery_hops):.1f}, "
+            f"median={np.median(delivery_hops):.0f}, "
+            f"max={max(delivery_hops)}"
+        )
         hop_dist = Counter(delivery_hops)
         for hops in sorted(hop_dist.keys())[:10]:
             print(f"    {hops} hops: {hop_dist[hops]} messages")
@@ -267,8 +285,10 @@ def diagnose_forwarding(engine: DeliveryTracer) -> None:
 def diagnose_algorithm_comparison(config: SimulationConfig, seed: int) -> None:
     header("PART 3: ALGORITHM COMPARISON")
 
-    for algo_name, algo_type in [("Adaptive", AlgorithmType.ADAPTIVE),
-                                  ("Baseline", AlgorithmType.BASELINE)]:
+    for algo_name, algo_type in [
+        ("Adaptive", AlgorithmType.ADAPTIVE),
+        ("Baseline", AlgorithmType.BASELINE),
+    ]:
         engine = DeliveryTracer(
             config=config,
             algorithm_type=algo_type,
@@ -278,16 +298,23 @@ def diagnose_algorithm_comparison(config: SimulationConfig, seed: int) -> None:
         result = engine.run()
 
         subheader(f"3. {algo_name} at 20% connectivity")
-        print(f"  Tasks: {result.total_tasks}, "
-              f"Assigned: {result.tasks_assigned} ({result.assignment_rate:.1%})")
+        print(
+            f"  Tasks: {result.total_tasks}, "
+            f"Assigned: {result.tasks_assigned} ({result.assignment_rate:.1%})"
+        )
         print(f"  Msgs created: {result.messages_created}")
-        print(f"  Msgs delivered: {result.messages_delivered} "
-              f"({result.delivery_rate:.1%})")
+        print(
+            f"  Msgs delivered: {result.messages_delivered} "
+            f"({result.delivery_rate:.1%})"
+        )
         print(f"  Msgs expired: {result.messages_expired}")
 
         avg_dt = result.average_delivery_time
-        print(f"  Avg delivery time: {avg_dt:.1f}s" if avg_dt else
-              "  Avg delivery time: N/A")
+        print(
+            f"  Avg delivery time: {avg_dt:.1f}s"
+            if avg_dt
+            else "  Avg delivery time: N/A"
+        )
 
         by_reason = Counter(r for _, _, _, _, r in engine.forward_events)
         print(f"  Forward events: {by_reason.get('forwarded', 0)}")
@@ -299,11 +326,14 @@ def diagnose_algorithm_comparison(config: SimulationConfig, seed: int) -> None:
         # Check assignments
         assignments = engine._manager._all_assignments
         if assignments:
-            p_vals = [a.predictability for a in assignments
-                      if a.predictability is not None]
+            p_vals = [
+                a.predictability for a in assignments if a.predictability is not None
+            ]
             if p_vals:
-                print(f"  Assignment P values: mean={np.mean(p_vals):.4f}, "
-                      f"min={np.min(p_vals):.4f}, max={np.max(p_vals):.4f}")
+                print(
+                    f"  Assignment P values: mean={np.mean(p_vals):.4f}, "
+                    f"min={np.min(p_vals):.4f}, max={np.max(p_vals):.4f}"
+                )
 
             # Check responder roles
             role_counts = Counter()
@@ -315,7 +345,7 @@ def diagnose_algorithm_comparison(config: SimulationConfig, seed: int) -> None:
                 print(f"  Assigned to roles: {dict(role_counts)}")
 
 
-def diagnose_delivery_paths(engine: DeliveryTracer, results) -> None:
+def diagnose_delivery_paths(engine: DeliveryTracer, _results) -> None:
     header("PART 4: DELIVERY PATH ANALYSIS")
 
     # Group forward events by message_id
@@ -356,8 +386,7 @@ def diagnose_delivery_paths(engine: DeliveryTracer, results) -> None:
     if undelivered_msgs:
         subheader("4c. Undelivered Messages (first 5)")
         for msg_id, events in undelivered_msgs[:5]:
-            forwards = [(t, s, tgt, r) for t, s, tgt, r in events
-                        if r == "forwarded"]
+            forwards = [(t, s, tgt, r) for t, s, tgt, r in events if r == "forwarded"]
             print(f"\n  Message {msg_id[:12]}:")
             print(f"    Forwards: {len(forwards)}")
             # Check where message ended up
@@ -380,9 +409,11 @@ def diagnose_multiple_seeds(config: SimulationConfig) -> None:
         result = engine.run()
         avg_dt = result.average_delivery_time
         dt_str = f"{avg_dt:.0f}s" if avg_dt else "N/A"
-        print(f"  seed={seed}: delivery={result.delivery_rate:.1%} "
-              f"({result.messages_delivered}/{result.messages_created}), "
-              f"avg_dt={dt_str}")
+        print(
+            f"  seed={seed}: delivery={result.delivery_rate:.1%} "
+            f"({result.messages_delivered}/{result.messages_created}), "
+            f"avg_dt={dt_str}"
+        )
 
     subheader("5b. Baseline at 20% connectivity, seeds 42-51")
     for seed in range(42, 52):
@@ -395,25 +426,32 @@ def diagnose_multiple_seeds(config: SimulationConfig) -> None:
         result = engine.run()
         avg_dt = result.average_delivery_time
         dt_str = f"{avg_dt:.0f}s" if avg_dt else "N/A"
-        print(f"  seed={seed}: delivery={result.delivery_rate:.1%} "
-              f"({result.messages_delivered}/{result.messages_created}), "
-              f"avg_dt={dt_str}")
+        print(
+            f"  seed={seed}: delivery={result.delivery_rate:.1%} "
+            f"({result.messages_delivered}/{result.messages_created}), "
+            f"avg_dt={dt_str}"
+        )
 
 
 # ============================================================================
 # Main
 # ============================================================================
 
+
 def main():
     config = SimulationConfig()
     seed = 42
 
     print("ERCS Delivery Rate Diagnostic")
-    print(f"Config: warmup={config.scenario.warmup_period_seconds}s, "
-          f"active={config.scenario.simulation_duration_seconds}s, "
-          f"total={config.total_simulation_duration}s")
-    print(f"Message TTL: {config.communication.message_ttl_seconds}s "
-          f"({config.communication.message_ttl_seconds / 60:.0f} min)")
+    print(
+        f"Config: warmup={config.scenario.warmup_period_seconds}s, "
+        f"active={config.scenario.simulation_duration_seconds}s, "
+        f"total={config.total_simulation_duration}s"
+    )
+    print(
+        f"Message TTL: {config.communication.message_ttl_seconds}s "
+        f"({config.communication.message_ttl_seconds / 60:.0f} min)"
+    )
 
     # Run instrumented Adaptive simulation
     engine = DeliveryTracer(
@@ -424,9 +462,11 @@ def main():
     )
     result = engine.run()
 
-    print(f"\nAdaptive @ 20% connectivity: "
-          f"{result.messages_delivered}/{result.messages_created} delivered "
-          f"({result.delivery_rate:.1%})")
+    print(
+        f"\nAdaptive @ 20% connectivity: "
+        f"{result.messages_delivered}/{result.messages_created} delivered "
+        f"({result.delivery_rate:.1%})"
+    )
 
     diagnose_encounter_vs_transfer(engine)
     diagnose_forwarding(engine)

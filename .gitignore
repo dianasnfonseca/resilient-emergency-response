@@ -39,7 +39,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Project outputs
+# Project outputs (regenerable)
+output/
 outputs/
 results/
 logs/

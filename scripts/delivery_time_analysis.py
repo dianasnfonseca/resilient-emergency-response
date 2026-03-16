@@ -42,7 +42,7 @@ def main() -> None:
         print("Run pilot_experiment.py first to generate raw data.")
         sys.exit(1)
 
-    with open(DATA_PATH) as f:
+    with DATA_PATH.open() as f:
         raw = json.load(f)
 
     print(f"Loaded raw data from {DATA_PATH}\n")
@@ -68,15 +68,23 @@ def main() -> None:
         base_runs = raw.get(base_key, [])
 
         # Extract per-run average delivery times, filtering None/null
-        adap = [r["avg_delivery_time"] for r in adap_runs
-                if r.get("avg_delivery_time") is not None]
-        base = [r["avg_delivery_time"] for r in base_runs
-                if r.get("avg_delivery_time") is not None]
+        adap = [
+            r["avg_delivery_time"]
+            for r in adap_runs
+            if r.get("avg_delivery_time") is not None
+        ]
+        base = [
+            r["avg_delivery_time"]
+            for r in base_runs
+            if r.get("avg_delivery_time") is not None
+        ]
 
         n = min(len(adap), len(base))
         if n < 3:
-            print(f"{connectivity:>6.2f}  insufficient data "
-                  f"(adap={len(adap)}, base={len(base)})")
+            print(
+                f"{connectivity:>6.2f}  insufficient data "
+                f"(adap={len(adap)}, base={len(base)})"
+            )
             continue
 
         a_vals = adap[:n]
@@ -128,9 +136,7 @@ def main() -> None:
             "These 30 runs ARE the formal experiment."
         )
     else:
-        print(
-            "p >= 0.05 at 20% connectivity → 30 runs is NOT sufficient."
-        )
+        print("p >= 0.05 at 20% connectivity → 30 runs is NOT sufficient.")
         try:
             from statsmodels.stats.power import tt_ind_solve_power
 
@@ -150,10 +156,7 @@ def main() -> None:
             else:
                 print("Effect size is zero — no meaningful difference detected.")
         except ImportError:
-            print(
-                "Install statsmodels for power analysis: "
-                "pip install statsmodels"
-            )
+            print("Install statsmodels for power analysis: " "pip install statsmodels")
 
 
 if __name__ == "__main__":

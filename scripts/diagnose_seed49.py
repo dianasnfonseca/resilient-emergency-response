@@ -25,34 +25,19 @@ sys.path.insert(0, str(project_root / "src"))
 import numpy as np
 
 from ercs.communication.prophet import (
-    CommunicationLayer,
-    MessageStatus,
     MessageType,
     TransmissionResult,
 )
 from ercs.config.parameters import (
     AlgorithmType,
-    CommunicationParameters,
-    NetworkParameters,
     ResponderRole,
     SimulationConfig,
 )
-from ercs.coordination.algorithms import (
-    CoordinationManager,
-    CoordinatorBase,
-    NetworkStateProvider,
-    ResponderLocator,
-    create_coordinator,
-)
-from ercs.network.mobility import MobilityManager, _assign_roles
-from ercs.network.topology import generate_topology
-from ercs.scenario.generator import ScenarioGenerator
+from ercs.network.mobility import _assign_roles
 from ercs.simulation.engine import (
     SimulationEngine,
     SimulationEventType,
-    TopologyAdapter,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════════
 # Data structures for tracing
@@ -108,6 +93,7 @@ class MessageTrace:
 @dataclass
 class EncounterRecord:
     """Records each encounter between two nodes (link-available edges)."""
+
     time: float
     node_a: str
     node_b: str
@@ -135,8 +121,7 @@ class TracingEngine(SimulationEngine):
         mobile_ids = self._topology.get_mobile_responder_ids()
         roles = _assign_roles(len(mobile_ids))
         self._role_map = {
-            node_id: roles[idx].value
-            for idx, node_id in enumerate(mobile_ids)
+            node_id: roles[idx].value for idx, node_id in enumerate(mobile_ids)
         }
 
     # ── Override _handle_coordination_cycle to trace message creation ──
@@ -197,12 +182,17 @@ class TracingEngine(SimulationEngine):
             self.message_traces[message.message_id] = trace
 
             self._log_event(
-                SimulationEventType.TASK_ASSIGNED, event.timestamp,
-                {"task_id": assignment.task_id, "responder_id": assignment.responder_id,
-                 "response_time": response_time},
+                SimulationEventType.TASK_ASSIGNED,
+                event.timestamp,
+                {
+                    "task_id": assignment.task_id,
+                    "responder_id": assignment.responder_id,
+                    "response_time": response_time,
+                },
             )
             self._log_event(
-                SimulationEventType.MESSAGE_CREATED, event.timestamp,
+                SimulationEventType.MESSAGE_CREATED,
+                event.timestamp,
                 {"message_id": message.message_id, "task_id": assignment.task_id},
             )
 
@@ -212,7 +202,8 @@ class TracingEngine(SimulationEngine):
         """Override to trace forwarding during mobility encounters."""
         delta_time = event.data.get("delta_time", 1.0)
         moved_nodes = self._mobility.step(
-            current_time=event.timestamp, delta_time=delta_time,
+            current_time=event.timestamp,
+            delta_time=delta_time,
         )
         if not moved_nodes:
             return
@@ -232,17 +223,28 @@ class TracingEngine(SimulationEngine):
             if link_key not in self._active_links:
                 self._active_links.add(link_key)
                 delivered = self._communication.process_encounter(
-                    node_a=node_a, node_b=node_b, current_time=event.timestamp,
+                    node_a=node_a,
+                    node_b=node_b,
+                    current_time=event.timestamp,
                 )
                 self._trace_transfers(delivered, node_a, node_b, event.timestamp, "new")
-                self.encounter_log.append(EncounterRecord(
-                    event.timestamp, node_a, node_b, "new",
-                ))
+                self.encounter_log.append(
+                    EncounterRecord(
+                        event.timestamp,
+                        node_a,
+                        node_b,
+                        "new",
+                    )
+                )
             else:
                 delivered = self._communication.transfer_messages(
-                    node_a=node_a, node_b=node_b, current_time=event.timestamp,
+                    node_a=node_a,
+                    node_b=node_b,
+                    current_time=event.timestamp,
                 )
-                self._trace_transfers(delivered, node_a, node_b, event.timestamp, "existing")
+                self._trace_transfers(
+                    delivered, node_a, node_b, event.timestamp, "existing"
+                )
 
             self._process_delivered_messages(delivered, event.timestamp, results)
 
@@ -258,20 +260,31 @@ class TracingEngine(SimulationEngine):
         new_links = current_links - self._active_links
         for node_a, node_b in new_links:
             delivered = self._communication.process_encounter(
-                node_a=node_a, node_b=node_b, current_time=event.timestamp,
+                node_a=node_a,
+                node_b=node_b,
+                current_time=event.timestamp,
             )
             self._trace_transfers(delivered, node_a, node_b, event.timestamp, "new")
-            self.encounter_log.append(EncounterRecord(
-                event.timestamp, node_a, node_b, "new",
-            ))
+            self.encounter_log.append(
+                EncounterRecord(
+                    event.timestamp,
+                    node_a,
+                    node_b,
+                    "new",
+                )
+            )
             self._process_delivered_messages(delivered, event.timestamp, results)
 
         existing_links = current_links & self._active_links
         for node_a, node_b in existing_links:
             delivered = self._communication.transfer_messages(
-                node_a=node_a, node_b=node_b, current_time=event.timestamp,
+                node_a=node_a,
+                node_b=node_b,
+                current_time=event.timestamp,
             )
-            self._trace_transfers(delivered, node_a, node_b, event.timestamp, "existing")
+            self._trace_transfers(
+                delivered, node_a, node_b, event.timestamp, "existing"
+            )
             self._process_delivered_messages(delivered, event.timestamp, results)
 
         self._active_links = current_links
@@ -297,14 +310,16 @@ class TracingEngine(SimulationEngine):
             if r.reason == "delivered":
                 trace.final_status = "delivered"
                 trace.delivery_time = time
-                trace.forward_events.append(ForwardEvent(
-                    time=time,
-                    from_node=r.source_node,
-                    to_node=r.target_node,
-                    p_from_to_dest=0.0,
-                    p_to_to_dest=1.0,
-                    transfer_type="direct",
-                ))
+                trace.forward_events.append(
+                    ForwardEvent(
+                        time=time,
+                        from_node=r.source_node,
+                        to_node=r.target_node,
+                        p_from_to_dest=0.0,
+                        p_to_to_dest=1.0,
+                        transfer_type="direct",
+                    )
+                )
                 # Close buffer entry for the delivering node
                 for entry in trace.buffer_residence:
                     if entry.node == r.source_node and entry.exit_time is None:
@@ -319,14 +334,16 @@ class TracingEngine(SimulationEngine):
                 p_to = self._communication.get_delivery_predictability(
                     r.target_node, dest
                 )
-                trace.forward_events.append(ForwardEvent(
-                    time=time,
-                    from_node=r.source_node,
-                    to_node=r.target_node,
-                    p_from_to_dest=p_from,
-                    p_to_to_dest=p_to,
-                    transfer_type="forward",
-                ))
+                trace.forward_events.append(
+                    ForwardEvent(
+                        time=time,
+                        from_node=r.source_node,
+                        to_node=r.target_node,
+                        p_from_to_dest=p_from,
+                        p_to_to_dest=p_to,
+                        transfer_type="forward",
+                    )
+                )
                 trace.holders.add(r.target_node)
                 trace.buffer_residence.append(
                     BufferEntry(node=r.target_node, enter_time=time)
@@ -359,7 +376,9 @@ def is_link_available(node_a: str, node_b: str, connectivity: float, seed: int) 
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def run_traced(seed: int, connectivity: float, algorithm: AlgorithmType) -> TracingEngine:
+def run_traced(
+    seed: int, connectivity: float, algorithm: AlgorithmType
+) -> TracingEngine:
     config = SimulationConfig()
     engine = TracingEngine(
         config=config,
@@ -382,10 +401,7 @@ def analyze_seed(engine: TracingEngine, label: str):
     results_summary = {
         "total_messages": len(traces),
         "delivered": sum(1 for t in traces.values() if t.final_status == "delivered"),
-        "expired": sum(
-            1 for t in traces.values()
-            if t.final_status != "delivered"
-        ),
+        "expired": sum(1 for t in traces.values() if t.final_status != "delivered"),
     }
 
     delivered_count = results_summary["delivered"]
@@ -404,7 +420,7 @@ def analyze_seed(engine: TracingEngine, label: str):
     zero_fwd = sum(1 for c in fwd_counts if c == 0)
     holder_counts = [len(t.holders) for t in traces.values()]
 
-    print(f"\n  Forwarding statistics:")
+    print("\n  Forwarding statistics:")
     print(f"    Messages with 0 forwards (stuck in source buffer): {zero_fwd}/{total}")
     print(f"    Avg forwards per message: {np.mean(fwd_counts):.1f}")
     print(f"    Max forwards per message: {max(fwd_counts) if fwd_counts else 0}")
@@ -419,21 +435,25 @@ def analyze_seed(engine: TracingEngine, label: str):
         if t.final_status == "delivered":
             role_delivered[t.destination_role] += 1
 
-    print(f"\n  Assignment by destination role:")
+    print("\n  Assignment by destination role:")
     for role in ["rescue", "transport", "liaison"]:
         assigned = role_counts.get(role, 0)
         deliv = role_delivered.get(role, 0)
         pct_r = 100 * deliv / assigned if assigned else 0
-        print(f"    {role:12s}: {assigned:3d} assigned, {deliv:3d} delivered ({pct_r:.0f}%)")
+        print(
+            f"    {role:12s}: {assigned:3d} assigned, {deliv:3d} delivered ({pct_r:.0f}%)"
+        )
 
     # Encounter analysis
     new_encounters = sum(1 for e in engine.encounter_log if e.encounter_type == "new")
     coord_ids = set(engine._topology.get_coordination_node_ids())
     coord_encounters = sum(
-        1 for e in engine.encounter_log
-        if e.encounter_type == "new" and (e.node_a in coord_ids or e.node_b in coord_ids)
+        1
+        for e in engine.encounter_log
+        if e.encounter_type == "new"
+        and (e.node_a in coord_ids or e.node_b in coord_ids)
     )
-    print(f"\n  Encounter statistics:")
+    print("\n  Encounter statistics:")
     print(f"    Total new-link encounters: {new_encounters}")
     print(f"    Coord-involved encounters: {coord_encounters}")
 
@@ -444,7 +464,7 @@ def analyze_expired_messages(engine: TracingEngine):
     """Deep analysis of messages that were never delivered."""
     traces = engine.message_traces
     expired = [t for t in traces.values() if t.final_status != "delivered"]
-    coord_ids = set(engine._topology.get_coordination_node_ids())
+    set(engine._topology.get_coordination_node_ids())
 
     if not expired:
         print("\n  No expired messages — all delivered!")
@@ -469,14 +489,20 @@ def analyze_expired_messages(engine: TracingEngine):
 
     for msg in expired[:10]:  # Limit detailed output to 10 messages
         print(f"\n  === Message {msg.message_id[:12]}... ===")
-        print(f"    Source: {msg.source} → Dest: {msg.destination} (role: {msg.destination_role})")
-        print(f"    Created: {msg.creation_time:.0f}s, Expires: {msg.creation_time + msg.ttl_seconds:.0f}s")
+        print(
+            f"    Source: {msg.source} → Dest: {msg.destination} (role: {msg.destination_role})"
+        )
+        print(
+            f"    Created: {msg.creation_time:.0f}s, Expires: {msg.creation_time + msg.ttl_seconds:.0f}s"
+        )
         print(f"    Forward events: {len(msg.forward_events)}")
         print(f"    Unique holders: {len(msg.holders)}")
 
         if msg.forward_events:
             last_fwd = msg.forward_events[-1]
-            print(f"    Last forward: t={last_fwd.time:.0f}s {last_fwd.from_node}→{last_fwd.to_node}")
+            print(
+                f"    Last forward: t={last_fwd.time:.0f}s {last_fwd.from_node}→{last_fwd.to_node}"
+            )
         else:
             print(f"    !! Never forwarded — message stayed in {msg.source} buffer")
 
@@ -494,24 +520,32 @@ def analyze_expired_messages(engine: TracingEngine):
         # (encounter_index is bidirectional from our logging)
 
         overlap = nodes_that_met_dest & msg.holders
-        print(f"    Nodes that met dest during msg lifetime: {len(nodes_that_met_dest)}")
+        print(
+            f"    Nodes that met dest during msg lifetime: {len(nodes_that_met_dest)}"
+        )
         print(f"    Of those, also held this message: {len(overlap)}")
 
         if len(overlap) > 0:
             could_have_delivered += 1
-            print(f"    !!! Message COULD HAVE BEEN DELIVERED but wasn't")
+            print("    !!! Message COULD HAVE BEEN DELIVERED but wasn't")
             for node in list(overlap)[:5]:
                 # When did this node hold the message?
                 held_entries = [b for b in msg.buffer_residence if b.node == node]
                 # When did this node meet the destination?
-                met_times = [t for t, other in encounter_index.get(dest, [])
-                             if other == node and msg_start <= t <= msg_end]
-                print(f"      {node}: held msg from t={held_entries[0].enter_time:.0f}s, "
-                      f"met dest at {[f'{t:.0f}' for t in met_times[:5]]}")
+                met_times = [
+                    t
+                    for t, other in encounter_index.get(dest, [])
+                    if other == node and msg_start <= t <= msg_end
+                ]
+                print(
+                    f"      {node}: held msg from t={held_entries[0].enter_time:.0f}s, "
+                    f"met dest at {[f'{t:.0f}' for t in met_times[:5]]}"
+                )
                 # Check: was it holding msg WHEN it met dest?
                 for met_t in met_times:
                     was_holding = any(
-                        b.enter_time <= met_t and (b.exit_time is None or b.exit_time > met_t)
+                        b.enter_time <= met_t
+                        and (b.exit_time is None or b.exit_time > met_t)
                         for b in held_entries
                     )
                     if was_holding:
@@ -519,24 +553,37 @@ def analyze_expired_messages(engine: TracingEngine):
                         link_ok = is_link_available(
                             node, dest, engine.connectivity_level, engine.random_seed
                         )
-                        print(f"        At t={met_t:.0f}: was holding msg, link_available={link_ok}")
+                        print(
+                            f"        At t={met_t:.0f}: was holding msg, link_available={link_ok}"
+                        )
         elif len(nodes_that_met_dest) == 0:
             no_encounter_with_dest += 1
-            print(f"    Destination node had NO encounters during msg lifetime!")
+            print("    Destination node had NO encounters during msg lifetime!")
             # Check: does the dest node appear in ANY encounter?
             total_dest_enc = len(encounter_index.get(dest, []))
-            print(f"    Total encounters for {dest} across simulation: {total_dest_enc}")
+            print(
+                f"    Total encounters for {dest} across simulation: {total_dest_enc}"
+            )
         else:
             never_reached_neighbor += 1
-            print(f"    Message never reached a node that encounters the destination")
+            print("    Message never reached a node that encounters the destination")
 
     print(f"\n  Summary of {len(expired)} expired messages:")
     print(f"    Could have delivered (holder met dest): {could_have_delivered}")
-    print(f"    Dest had encounters but msg didn't reach neighbor: {never_reached_neighbor}")
+    print(
+        f"    Dest had encounters but msg didn't reach neighbor: {never_reached_neighbor}"
+    )
     print(f"    Dest had NO encounters during msg lifetime: {no_encounter_with_dest}")
-    remaining = len(expired) - could_have_delivered - never_reached_neighbor - no_encounter_with_dest
+    remaining = (
+        len(expired)
+        - could_have_delivered
+        - never_reached_neighbor
+        - no_encounter_with_dest
+    )
     if remaining > 0:
-        print(f"    (remaining {remaining} not analyzed in detail — only first 10 shown)")
+        print(
+            f"    (remaining {remaining} not analyzed in detail — only first 10 shown)"
+        )
 
 
 def analyze_link_availability(engine: TracingEngine):
@@ -567,7 +614,9 @@ def analyze_link_availability(engine: TracingEngine):
             if is_link_available(c, b, conn, seed):
                 coord_bridge_links += 1
 
-    print(f"\n  Coord → Bridge links: {coord_bridge_links}/{coord_bridge_total} available")
+    print(
+        f"\n  Coord → Bridge links: {coord_bridge_links}/{coord_bridge_total} available"
+    )
 
     # 2. Per-destination analysis for messages that failed
     failed = [t for t in traces.values() if t.final_status != "delivered"]
@@ -582,7 +631,9 @@ def analyze_link_availability(engine: TracingEngine):
         dest_role = msg.destination_role
 
         # Bridge nodes with available link to this destination
-        bridges_to_dest = [b for b in bridge_ids if is_link_available(b, dest, conn, seed)]
+        bridges_to_dest = [
+            b for b in bridge_ids if is_link_available(b, dest, conn, seed)
+        ]
         # Of those, which have available link FROM coord?
         full_path = []
         for b in bridges_to_dest:
@@ -596,14 +647,18 @@ def analyze_link_availability(engine: TracingEngine):
 
         if len(failed) <= 20:
             print(f"\n  Msg → {dest} ({dest_role}):")
-            print(f"    Bridges with link to dest: {len(bridges_to_dest)}/{len(bridge_ids)}")
+            print(
+                f"    Bridges with link to dest: {len(bridges_to_dest)}/{len(bridge_ids)}"
+            )
             print(f"    Full path coord→bridge→dest: {len(full_path)}")
             if full_path:
                 print(f"    Example paths: {full_path[:3]}")
             else:
-                print(f"    !!! NO 2-hop path available")
+                print("    !!! NO 2-hop path available")
 
-    print(f"\n  Messages with NO 2-hop coord→bridge→dest path: {no_path_count}/{len(failed)}")
+    print(
+        f"\n  Messages with NO 2-hop coord→bridge→dest path: {no_path_count}/{len(failed)}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -618,30 +673,42 @@ def main():
 
     # ── Part 1 & 2: Run both seeds ──
     print("\nRunning seed 49 at 20% connectivity (adaptive)...")
-    engine_bad = run_traced(seed=49, connectivity=0.20, algorithm=AlgorithmType.ADAPTIVE)
+    engine_bad = run_traced(
+        seed=49, connectivity=0.20, algorithm=AlgorithmType.ADAPTIVE
+    )
 
     # Find a good seed for comparison — try seed 42 first
     print("Running seed 42 at 20% connectivity (adaptive)...")
-    engine_good = run_traced(seed=42, connectivity=0.20, algorithm=AlgorithmType.ADAPTIVE)
+    engine_good = run_traced(
+        seed=42, connectivity=0.20, algorithm=AlgorithmType.ADAPTIVE
+    )
 
     # If seed 42 also has low delivery, try another
     good_delivery = sum(
         1 for t in engine_good.message_traces.values() if t.final_status == "delivered"
     )
     good_total = len(engine_good.message_traces)
-    good_label = f"SEED 42 (20% conn, adaptive) — {good_delivery}/{good_total} delivered"
+    good_label = (
+        f"SEED 42 (20% conn, adaptive) — {good_delivery}/{good_total} delivered"
+    )
 
     bad_summary = analyze_seed(engine_bad, "SEED 49 (20% conn, adaptive)")
     good_summary = analyze_seed(engine_good, good_label)
 
     # ── Comparison table ──
     print(f"\n{'─' * 70}")
-    print(f"  COMPARISON: SEED 49 vs SEED 42")
+    print("  COMPARISON: SEED 49 vs SEED 42")
     print(f"{'─' * 70}")
     print(f"  {'':30s}  {'Seed 49':>10s}  {'Seed 42':>10s}")
-    print(f"  {'Messages created':30s}  {bad_summary['total_messages']:>10d}  {good_summary['total_messages']:>10d}")
-    print(f"  {'Delivered':30s}  {bad_summary['delivered']:>10d}  {good_summary['delivered']:>10d}")
-    print(f"  {'Not delivered':30s}  {bad_summary['expired']:>10d}  {good_summary['expired']:>10d}")
+    print(
+        f"  {'Messages created':30s}  {bad_summary['total_messages']:>10d}  {good_summary['total_messages']:>10d}"
+    )
+    print(
+        f"  {'Delivered':30s}  {bad_summary['delivered']:>10d}  {good_summary['delivered']:>10d}"
+    )
+    print(
+        f"  {'Not delivered':30s}  {bad_summary['expired']:>10d}  {good_summary['expired']:>10d}"
+    )
 
     # Forwarding comparison
     bad_fwd = [len(t.forward_events) for t in engine_bad.message_traces.values()]
@@ -649,25 +716,35 @@ def main():
     bad_zero = sum(1 for c in bad_fwd if c == 0)
     good_zero = sum(1 for c in good_fwd if c == 0)
     print(f"  {'Zero-forward messages':30s}  {bad_zero:>10d}  {good_zero:>10d}")
-    print(f"  {'Avg forwards/msg':30s}  {np.mean(bad_fwd):>10.1f}  {np.mean(good_fwd):>10.1f}")
+    print(
+        f"  {'Avg forwards/msg':30s}  {np.mean(bad_fwd):>10.1f}  {np.mean(good_fwd):>10.1f}"
+    )
 
     bad_holders = [len(t.holders) for t in engine_bad.message_traces.values()]
     good_holders = [len(t.holders) for t in engine_good.message_traces.values()]
-    print(f"  {'Avg holders/msg':30s}  {np.mean(bad_holders):>10.1f}  {np.mean(good_holders):>10.1f}")
+    print(
+        f"  {'Avg holders/msg':30s}  {np.mean(bad_holders):>10.1f}  {np.mean(good_holders):>10.1f}"
+    )
 
     bad_new_enc = sum(1 for e in engine_bad.encounter_log if e.encounter_type == "new")
-    good_new_enc = sum(1 for e in engine_good.encounter_log if e.encounter_type == "new")
+    good_new_enc = sum(
+        1 for e in engine_good.encounter_log if e.encounter_type == "new"
+    )
     print(f"  {'New-link encounters':30s}  {bad_new_enc:>10d}  {good_new_enc:>10d}")
 
     bad_coord_ids = set(engine_bad._topology.get_coordination_node_ids())
     good_coord_ids = set(engine_good._topology.get_coordination_node_ids())
     bad_coord_enc = sum(
-        1 for e in engine_bad.encounter_log
-        if e.encounter_type == "new" and (e.node_a in bad_coord_ids or e.node_b in bad_coord_ids)
+        1
+        for e in engine_bad.encounter_log
+        if e.encounter_type == "new"
+        and (e.node_a in bad_coord_ids or e.node_b in bad_coord_ids)
     )
     good_coord_enc = sum(
-        1 for e in engine_good.encounter_log
-        if e.encounter_type == "new" and (e.node_a in good_coord_ids or e.node_b in good_coord_ids)
+        1
+        for e in engine_good.encounter_log
+        if e.encounter_type == "new"
+        and (e.node_a in good_coord_ids or e.node_b in good_coord_ids)
     )
     print(f"  {'Coord encounters':30s}  {bad_coord_enc:>10d}  {good_coord_enc:>10d}")
 
@@ -685,7 +762,7 @@ def main():
     delivered_bad = sum(1 for t in traces_bad.values() if t.final_status == "delivered")
 
     print(f"\n{'=' * 70}")
-    print(f"  HYPOTHESIS")
+    print("  HYPOTHESIS")
     print(f"{'=' * 70}")
 
     if zero_fwd_bad == total_bad:
@@ -701,14 +778,18 @@ def main():
         mobile_ids = engine_bad._topology.get_mobile_responder_ids()
         roles = _assign_roles(len(mobile_ids))
         role_map = {nid: roles[i] for i, nid in enumerate(mobile_ids)}
-        bridge_ids = [n for n, r in role_map.items()
-                      if r in (ResponderRole.TRANSPORT, ResponderRole.LIAISON)]
+        bridge_ids = [
+            n
+            for n, r in role_map.items()
+            if r in (ResponderRole.TRANSPORT, ResponderRole.LIAISON)
+        ]
 
         no_2hop = 0
         for msg in failed_msgs:
             dest = msg.destination
-            bridges_to_dest = [b for b in bridge_ids
-                               if is_link_available(b, dest, 0.20, 49)]
+            bridges_to_dest = [
+                b for b in bridge_ids if is_link_available(b, dest, 0.20, 49)
+            ]
             has_full_path = any(
                 is_link_available(c, b, 0.20, 49)
                 for b in bridges_to_dest
@@ -718,12 +799,20 @@ def main():
                 no_2hop += 1
 
         if no_2hop > total_bad * 0.5:
-            print("  C) Messages reach relay nodes but link to destination is unavailable")
-            print(f"     → {no_2hop}/{total_bad} messages have NO 2-hop path (coord→bridge→dest)")
+            print(
+                "  C) Messages reach relay nodes but link to destination is unavailable"
+            )
+            print(
+                f"     → {no_2hop}/{total_bad} messages have NO 2-hop path (coord→bridge→dest)"
+            )
         else:
-            print("  B) Messages forwarded but never reach a node that encounters destination")
+            print(
+                "  B) Messages forwarded but never reach a node that encounters destination"
+            )
             print("  E) PRoPHET P-values create forwarding dead-ends")
-            print(f"     → Messages forwarded (avg {np.mean(bad_fwd):.1f}) but never delivered")
+            print(
+                f"     → Messages forwarded (avg {np.mean(bad_fwd):.1f}) but never delivered"
+            )
     else:
         print("  F) Mixed causes — examine detailed output above")
 

@@ -2,8 +2,13 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://img.shields.io/badge/tests-411%20passing-brightgreen.svg)]()
 
 A discrete-event simulation framework for evaluating adaptive scheduling algorithms in emergency response coordination under intermittent connectivity. Integrates PRoPHETv2 delay-tolerant networking (DTN) with multi-agent task assignment and role-based Random Waypoint mobility.
+
+**MSc Computer Science Dissertation** -- University of Liverpool, 2026
+
+*Resilient and Adaptive Scheduling Systems for Emergency Response in Low Connectivity Environments*
 
 ## Research Questions
 
@@ -37,10 +42,11 @@ src/ercs/
 ├── evaluation/      # Statistical analysis (t-tests, ANOVA, effect sizes)
 └── visualization/   # Matplotlib plots, side-by-side animation, PRoPHET diagnostics
 
-app/dashboard.py             # Streamlit interactive dashboard (6 tabs)
-notebooks/experiment_report.ipynb  # Thesis-quality static analysis notebook
-scripts/                     # CLI tools: experiment, animation, diagnostics
-configs/default.yaml         # Default experiment configuration
+app/dashboard.py                  # Streamlit interactive dashboard
+notebooks/experiment_report.ipynb # Thesis-quality static analysis notebook
+scripts/                          # CLI tools: experiment, animation, diagnostics
+configs/default.yaml              # Single source of truth for all runtime parameters
+configs/valid_seeds.json          # Pre-screened seeds for topological validity
 ```
 
 ## Installation
@@ -60,72 +66,60 @@ For exact dependency versions used in development:
 pip install -r requirements.txt
 ```
 
-To install with visualization dependencies (Streamlit dashboard + Jupyter notebook):
+For visualization tools (Streamlit dashboard + Jupyter notebook):
 ```bash
 pip install -e ".[viz]"
 ```
 
 ## Usage
 
+### Quick Start
+
 ```bash
 # Validate configuration
 python scripts/run_experiment.py --config configs/default.yaml --dry-run
 
-# Quick test via Python
-from ercs.simulation import run_simulation
-results = run_simulation("adaptive", connectivity_level=0.75, random_seed=42)
-print(f"Delivery rate: {results.delivery_rate:.2%}")
-```
-
-### Full Experiment (180 runs)
-
-```python
-from ercs.simulation import ExperimentRunner
-from ercs.config.parameters import SimulationConfig
-
-runner = ExperimentRunner(SimulationConfig(), base_seed=42)
-results = runner.run_all(
-    progress_callback=lambda current, total: print(f"{current}/{total}")
-)
-```
-
-### Quick Start
-
-```bash
-# Interactive dashboard with research context and statistical analysis
+# Interactive dashboard with live experiment execution
 streamlit run app/dashboard.py
 
-# Static thesis-quality notebook with interpretive guidance
+# Static thesis-quality notebook
 jupyter notebook notebooks/experiment_report.ipynb
+```
+
+### Running Experiments
+
+```python
+from ercs.config.parameters import SimulationConfig
+from ercs.simulation.engine import ExperimentRunner
+
+# Quick test (30 runs)
+runner = ExperimentRunner(SimulationConfig(), base_seed=42)
+results = runner.run_all(
+    runs_per_config=5,
+    progress_callback=lambda current, total: print(f"{current}/{total}")
+)
+
+# Full experiment (180 runs)
+results = runner.run_all()
 ```
 
 ### Streamlit Dashboard
 
-Interactive web dashboard for running experiments and exploring results.
+Interactive web dashboard for running experiments and exploring results:
 
 ```bash
 streamlit run app/dashboard.py
 ```
 
 Features:
-
-- Research question framing and metric-to-question mapping
-- Sidebar with all experiment parameters and quick test mode (5 runs/config)
-- Live progress bar with ETA during experiment execution
-- Interactive visualizations: grouped bar charts, box plots, heatmaps, degradation lines
-- Network diagnostics: PRoPHET predictability graphs, message journey tracking
-- Statistical analysis tables (t-tests, ANOVA) with interpretive guidance
-- Results interpretation guide tied to research questions
-
-### Jupyter Notebook
-
-Notebook with publication-quality figures and interpretive markdown for each visualisation.
-
-```bash
-jupyter notebook notebooks/experiment_report.ipynb
-```
-
-Run all cells top-to-bottom. To do a quick test, change `RUNS = runs_per_config` to `RUNS = 5` in the execution cell. All figures are saved to `outputs/figures/`.
+- Research question framing with project overview
+- Complete parameter tables with literature rationale
+- Network topology visualization
+- Live experiment execution with progress bar and ETA
+- Interactive visualizations: grouped bars, box plots, heatmaps, degradation lines
+- Network diagnostics: PRoPHET predictability graphs, heatmaps, evolution, message journeys
+- Statistical analysis tables (t-tests, ANOVA) with effect size interpretation
+- Key findings tab with research question answers
 
 ### Animation and Diagnostics
 
@@ -133,130 +127,77 @@ Run all cells top-to-bottom. To do a quick test, change `RUNS = runs_per_config`
 # Side-by-side Adaptive vs Baseline animation
 python scripts/run_animation.py --duration 3600 --sample-interval 30
 
-# PRoPHET predictability network graph at a specific time
+# PRoPHET predictability network graph
 python scripts/run_animation.py --mode predictability --duration 3600 --time 1800
 
-# Message journey tracking (spatial path + hop timeline)
+# Message journey tracking
 python scripts/run_animation.py --mode journey --duration 3600
 
 # All message paths overview
 python scripts/run_animation.py --mode paths --connectivity 0.20
-
-# Coordination cycle comparison (Adaptive vs Baseline decisions)
-python scripts/diagnose_coordination.py
-
-# Network encounter frequency analysis
-python scripts/diagnose_encounters.py --connectivity 0.20
 ```
 
 ## Parameters
 
-### Network Topology
+All parameters are defined in `configs/default.yaml` and loaded via Pydantic models in `src/ercs/config/parameters.py`. See `TECHNICAL_REFERENCE.md` for complete parameter tables, equations, and algorithm pseudocode.
+
+### Key Configuration
 
 | Parameter | Value | Source |
 |-----------|-------|--------|
 | Node count | 50 (2 coordination + 48 mobile) | Ullah & Qayyum (2022) |
 | Simulation area | 3000 x 1500 m | Ullah & Qayyum (2022) |
-| Incident zone | 700 x 600 m, origin (0, 450) | Ullah & Qayyum (2022) |
-| Coordination zone | 50 x 50 m, origin (800, 300) | Design decision |
 | Radio range | 100 m | Ullah & Qayyum (2022) |
-| Buffer size | 25 MB (26,214,400 bytes) | Ullah & Qayyum (2022) |
-| Message size | 500 kB (512,000 bytes) | Kumar et al. (2023) |
 | Connectivity scenarios | 75%, 40%, 20% | Karaman et al. (2026) |
 | Mobility model | Role-based Random Waypoint | Ullah & Qayyum (2022); Aschenbruck et al. (2009) |
-
-### Role-Based Mobility
-
-| Role | Proportion | Zone Constraint | Speed Range |
-|------|-----------|-----------------|-------------|
-| RESCUE | ~60% | Incident zone only | 1-5 m/s |
-| TRANSPORT | ~25% | Shuttle incident <-> coordination | 5-20 m/s |
-| LIAISON | ~15% | Full simulation area | 1-10 m/s |
-
-### PRoPHETv2 Protocol
-
-| Parameter | Value | Source |
-|-----------|-------|--------|
-| P_enc_max | 0.5 | Grasic et al. (2011) |
-| I_typ (inter-encounter interval) | 1800 s | Grasic et al. (2011) |
-| beta (transitivity) | 0.9 | Grasic et al. (2011) |
-| gamma (aging) | 0.999885791 | Grasic et al. (2011) |
-| Aging interval | 30 s | Kumar et al. (2023) |
-| Message TTL | 300 min (18,000 s) | Ullah & Qayyum (2022) |
-| Transmit speed | 2 Mbps | Ullah & Qayyum (2022) |
-| Buffer drop policy | Drop oldest | Ullah & Qayyum (2022) |
-
-### Scenario Generation
-
-| Parameter | Value | Source |
-|-----------|-------|--------|
-| Task arrival | Poisson process | Pu et al. (2025) |
-| Message rate | 2 msgs/min | Kumar et al. (2023) |
-| Urgency distribution | 20% High, 50% Medium, 30% Low | Li et al. (2025) |
+| PRoPHETv2 P_enc_max | 0.5 | Grasic et al. (2011) |
+| Task arrival | Poisson, 2 msgs/min | Kumar et al. (2023) |
 | Simulation duration | 6000 s (~100 min) | Ullah & Qayyum (2022) |
-| Warm-up period | 0 s (cold-start, configurable) | Grassmann (2008) |
-
-### Coordination
-
-| Parameter | Value | Source |
-|-----------|-------|--------|
-| Coordination interval | 30 min (1800 s) | Kaji et al. (2025) |
-| Priority levels | 3 | Rosas et al. (2023) |
-| Path threshold (Adaptive) | P > 0.3 | Ullah & Qayyum (2022) |
-| Scoring weights (Adaptive) | alpha=0.2 predict., gamma_r=0.2 recency, beta=0.6 proximity | Boondirek et al. (2014); Nelson et al. (2009) |
-| Workload penalty (Adaptive) | lambda=0.2 | Cui et al. (2022) |
-
-### Experimental Design
-
-| Parameter | Value | Source |
-|-----------|-------|--------|
 | Runs per configuration | 30 | Law (2015) |
-| Total configurations | 6 (2 algorithms x 3 connectivity) | -- |
 | Total experimental runs | 180 | -- |
 
-## Algorithms
+### Algorithms
 
 **Adaptive Coordinator** (urgency-first, network-aware): Prioritises tasks by urgency (High > Medium > Low). Filters responders by PRoPHETv2 delivery predictability (P > 0.3), applies a hard capacity bound (k_max), then selects using a weighted score: `Score = 0.2 x P_abs + 0.2 x R_norm + 0.6 x D_norm - 0.2 x W_penalty`, balancing delivery predictability, encounter recency, and physical proximity while penalising already-assigned responders.
 
 **Baseline Coordinator** (FCFS, proximity-only): FCFS task ordering, assigns to nearest responder by Euclidean distance regardless of network connectivity or link quality. No network state.
 
-## Experiment
-
-2 algorithms x 3 connectivity levels x 30 runs = 180 total simulation runs.
-
-Methodology: PRoPHETv2 routing (Grasic et al., 2011), 30 runs per configuration (Law, 2015), P > 0.3 reachability threshold (Ullah & Qayyum, 2022), k_max capacity bound (Bhatti et al., 2021), connectivity levels 75%/40%/20% (Karaman et al., 2024), urgency distribution 20% High / 50% Medium / 30% Low (Li et al., 2025).
-
-## Evaluation Metrics
+### Evaluation Metrics
 
 | Metric | Research Question | What It Measures |
 | ------ | ----------------- | ---------------- |
 | avg_delivery_time | MRQ, SQ1 | Whether adaptive coordination improves coordination speed |
 | delivery_rate | SQ2 | The reliability-over-coverage trade-off from the P > 0.3 filter |
 | assignment_rate | Diagnostic | Experimental parity check -- expected identical across algorithms |
-| avg_response_time | Diagnostic | Internal processing overhead -- expected identical across algorithms |
+| avg_decision_time | Diagnostic | Internal processing overhead -- expected identical across algorithms |
 
 Statistical analysis includes Welch's independent t-tests, one-way ANOVA, Cohen's d effect sizes, and eta-squared with 95% confidence intervals.
+
+## Reproducibility
+
+All stochastic elements in the simulation are controlled through seeded random number generators:
+
+- **Topology and mobility:** NetworkX graph construction and Random Waypoint movement use per-seed, per-node RNG instances
+- **Task generation:** Poisson arrivals use a seeded RNG
+- **Link availability:** Deterministic CRC32 hash of (node_i, node_j, seed) -- no randomness involved
+- **Seed pre-screening:** All candidate seeds are validated for topological connectivity at every scenario level (`configs/valid_seeds.json`)
+- **Encounter processing order:** The simulation engine processes node encounters using `sorted()` on link tuples, imposing deterministic lexicographic ordering. This ensures identical results across processes regardless of `PYTHONHASHSEED`, because Python set iteration is hash-seed-dependent
+
+The dissertation results in Chapter 5 were generated in a single session and are internally consistent. The deterministic encounter ordering guarantees that future runs are also cross-process reproducible.
 
 ## Testing
 
 ```bash
 pytest                    # Run all 411 tests
-pytest --cov=ercs         # With coverage
+pytest --cov=ercs         # With coverage (>80% threshold)
 pytest -m "not slow"      # Skip slow tests
 ```
 
 ## Documentation
 
-- [`docs/GUIDE.md`](docs/GUIDE.md) — Complete architecture guide, event cascade details, PRoPHETv2 equations, and visualisation reference.
-- [`docs/Appendix_D_Technical_Reference_v1.md`](docs/Appendix_D_Technical_Reference_v1.md) — Formal technical reference appendix with all parameters, equations, algorithm pseudocode, and statistical framework.
-- [`configs/default.yaml`](configs/default.yaml) — Single source of truth for all runtime parameters (mirrored in Pydantic defaults).
-
-## Academic Context
-
-**Resilient and Adaptive Scheduling Systems for Emergency Response in Low Connectivity Environments**
-
-MSc Computer Science
-University of Liverpool, 2026
+- `TECHNICAL_REFERENCE.md` -- Complete parameter tables, PRoPHETv2 equations, algorithm pseudocode, experimental design, and statistical framework (maps to dissertation Appendix D)
+- `configs/default.yaml` -- Single source of truth for all runtime parameters
+- `scripts/README.md` -- Guide to CLI tools and diagnostic scripts
 
 ## License
 

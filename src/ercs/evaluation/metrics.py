@@ -16,7 +16,7 @@ Implements:
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 from scipy import stats
@@ -269,7 +269,9 @@ class MetricExtractor:
     from SimulationResults objects.
     """
 
-    _extractors: dict[MetricType, Callable[[SimulationResults], float | None]] = {
+    _extractors: ClassVar[
+        dict[MetricType, Callable[[SimulationResults], float | None]]
+    ] = {
         MetricType.DELIVERY_RATE: lambda r: r.delivery_rate,
         MetricType.ASSIGNMENT_RATE: lambda r: r.assignment_rate,
         MetricType.DECISION_TIME: lambda r: r.average_decision_time,
@@ -647,7 +649,7 @@ class PerformanceEvaluator:
             filtered = self.results
 
         # Group by connectivity level
-        connectivity_levels = sorted(set(r.connectivity_level for r in filtered))
+        connectivity_levels = sorted({r.connectivity_level for r in filtered})
         groups = {}
 
         for conn in connectivity_levels:
@@ -676,7 +678,7 @@ class PerformanceEvaluator:
         report = EvaluationReport()
 
         # Get connectivity levels
-        connectivity_levels = sorted(set(r.connectivity_level for r in self.results))
+        connectivity_levels = sorted({r.connectivity_level for r in self.results})
 
         # Compare algorithms at each connectivity level
         for metric in metrics:
@@ -706,7 +708,8 @@ class PerformanceEvaluator:
         return report
 
     def compute_system_availability(
-        self, results: list[SimulationResults],
+        self,
+        results: list[SimulationResults],
     ) -> DescriptiveStats:
         """Aggregate System Availability across runs.
 
@@ -714,14 +717,13 @@ class PerformanceEvaluator:
         SpecDesign Section 1.4.10.
         """
         availabilities = [
-            r.system_availability
-            for r in results
-            if r.system_availability is not None
+            r.system_availability for r in results if r.system_availability is not None
         ]
         return self.analyzer.descriptive_stats(availabilities)
 
     def compute_urgency_stratified_delivery(
-        self, results: list[SimulationResults],
+        self,
+        results: list[SimulationResults],
     ) -> dict[str, DescriptiveStats]:
         """Delivery rate stratified by urgency level (H/M/L).
 
@@ -732,7 +734,9 @@ class PerformanceEvaluator:
 
         for result in results:
             # Assignments per urgency (requires urgency field in TASK_ASSIGNED events)
-            assigned_by_urgency: dict[str, set[str]] = {u: set() for u in urgency_levels}
+            assigned_by_urgency: dict[str, set[str]] = {
+                u: set() for u in urgency_levels
+            }
             for event in result.events:
                 if event.event_type == SimulationEventType.TASK_ASSIGNED:
                     urgency = event.data.get("urgency")
@@ -764,9 +768,7 @@ class PerformanceEvaluator:
             "total_runs": len(self.results),
             "adaptive_runs": len(adaptive),
             "baseline_runs": len(baseline),
-            "connectivity_levels": sorted(
-                set(r.connectivity_level for r in self.results)
-            ),
+            "connectivity_levels": sorted({r.connectivity_level for r in self.results}),
             "algorithms": ["adaptive", "baseline"],
         }
 

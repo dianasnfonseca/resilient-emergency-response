@@ -10,6 +10,7 @@ These tests verify that:
 """
 
 import pytest
+from conftest import CONNECTIVITY_MILD
 
 from ercs.config.parameters import (
     AlgorithmType,
@@ -21,8 +22,6 @@ from ercs.simulation.engine import (
     SimulationEngine,
     SimulationEventType,
 )
-
-from conftest import CONNECTIVITY_MILD
 
 
 class TestWarmupPeriod:
@@ -42,9 +41,7 @@ class TestWarmupPeriod:
             ),
         )
 
-    def test_initial_predictability_is_zero(
-        self, warmup_config: SimulationConfig
-    ):
+    def test_initial_predictability_is_zero(self, warmup_config: SimulationConfig):
         """Test that all predictabilities start at zero."""
         engine = SimulationEngine(
             config=warmup_config,
@@ -65,13 +62,9 @@ class TestWarmupPeriod:
                 p = engine._communication.get_delivery_predictability(
                     coord_id, mobile_id
                 )
-                assert p == 0.0, (
-                    f"Expected P=0 for ({coord_id}, {mobile_id}), got {p}"
-                )
+                assert p == 0.0, f"Expected P=0 for ({coord_id}, {mobile_id}), got {p}"
 
-    def test_predictability_builds_during_warmup(
-        self, warmup_config: SimulationConfig
-    ):
+    def test_predictability_builds_during_warmup(self, warmup_config: SimulationConfig):
         """Test that encounters during warm-up build predictability."""
         engine = SimulationEngine(
             config=warmup_config,
@@ -118,13 +111,10 @@ class TestWarmupPeriod:
 
         for event in task_events:
             assert event.timestamp >= warmup_end, (
-                f"Task created at {event.timestamp} before "
-                f"warm-up end {warmup_end}"
+                f"Task created at {event.timestamp} before " f"warm-up end {warmup_end}"
             )
 
-    def test_coordination_only_after_warmup(
-        self, warmup_config: SimulationConfig
-    ):
+    def test_coordination_only_after_warmup(self, warmup_config: SimulationConfig):
         """Test that coordination cycles only occur after warm-up."""
         engine = SimulationEngine(
             config=warmup_config,
@@ -145,8 +135,7 @@ class TestWarmupPeriod:
 
         for event in coord_events:
             assert event.timestamp >= warmup_end, (
-                f"Coordination at {event.timestamp} before "
-                f"warm-up end {warmup_end}"
+                f"Coordination at {event.timestamp} before " f"warm-up end {warmup_end}"
             )
 
     def test_warmup_end_event_logged(self, warmup_config: SimulationConfig):
@@ -161,9 +150,7 @@ class TestWarmupPeriod:
         results = engine.run()
 
         warmup_events = [
-            e
-            for e in results.events
-            if e.event_type == SimulationEventType.WARMUP_END
+            e for e in results.events if e.event_type == SimulationEventType.WARMUP_END
         ]
 
         assert len(warmup_events) == 1
@@ -200,9 +187,7 @@ class TestWarmupPeriod:
         results = engine.run()
 
         warmup_events = [
-            e
-            for e in results.events
-            if e.event_type == SimulationEventType.WARMUP_END
+            e for e in results.events if e.event_type == SimulationEventType.WARMUP_END
         ]
 
         assert len(warmup_events) == 0

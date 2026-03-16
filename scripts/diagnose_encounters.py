@@ -14,7 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from ercs.config.parameters import SimulationConfig
 from ercs.coordination.algorithms import AlgorithmType
-from ercs.simulation.engine import SimulationEngine, SimulationEventType, SimulationResults
+from ercs.simulation.engine import (
+    SimulationEngine,
+)
 
 
 class DiagnosticEngine(SimulationEngine):
@@ -30,7 +32,9 @@ class DiagnosticEngine(SimulationEngine):
         # Tracking state
         self._encounter_counts = Counter()
         self._encounter_times = defaultdict(list)
-        self._min_distances = {cid: (float("inf"), 0.0) for cid in self._coord_ids}  # (dist, time)
+        self._min_distances = {
+            cid: (float("inf"), 0.0) for cid in self._coord_ids
+        }  # (dist, time)
 
         # Wrap process_encounter to count by type
         self._original_process = self._communication.process_encounter
@@ -80,7 +84,9 @@ def run_diagnostic(duration=6000, connectivity=0.75, seed=42, algorithm="adaptiv
     )
 
     # Run simulation
-    print(f"Running simulation ({duration}s, connectivity={connectivity}, seed={seed}, {algorithm})...")
+    print(
+        f"Running simulation ({duration}s, connectivity={connectivity}, seed={seed}, {algorithm})..."
+    )
     results = engine.run()
 
     # -- Report --
@@ -118,7 +124,9 @@ def run_diagnostic(duration=6000, connectivity=0.75, seed=42, algorithm="adaptiv
     radio = config.network.radio_range_m
     for cid in sorted(coord_ids):
         d, t = engine._min_distances[cid]
-        in_range = "WITHIN RANGE" if d <= radio else f"{d/radio:.0f}x beyond radio range"
+        in_range = (
+            "WITHIN RANGE" if d <= radio else f"{d/radio:.0f}x beyond radio range"
+        )
         print(f"  {cid}: {d:.0f}m at t={t:.0f}s ({in_range})")
 
     print("\n" + "=" * 60)
@@ -172,7 +180,9 @@ def run_diagnostic(duration=6000, connectivity=0.75, seed=42, algorithm="adaptiv
         print(f"  Radio range: {radio:.0f}m")
         print(f"  Gap: {closest - radio:.0f}m")
         if closest > radio:
-            print("\n  ROOT CAUSE: Mobile nodes never come within radio range of coord nodes.")
+            print(
+                "\n  ROOT CAUSE: Mobile nodes never come within radio range of coord nodes."
+            )
             print("  The 2200m gap between incident zone and coordination zone")
             print("  is too large for Random Waypoint to bridge reliably.")
     else:
@@ -184,10 +194,13 @@ def run_diagnostic(duration=6000, connectivity=0.75, seed=42, algorithm="adaptiv
 
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--duration", type=int, default=6000)
     parser.add_argument("--connectivity", type=float, default=0.75)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--algorithm", choices=["adaptive", "baseline"], default="adaptive")
+    parser.add_argument(
+        "--algorithm", choices=["adaptive", "baseline"], default="adaptive"
+    )
     args = parser.parse_args()
     run_diagnostic(args.duration, args.connectivity, args.seed, args.algorithm)

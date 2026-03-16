@@ -25,12 +25,14 @@ ALGORITHMS = [AlgorithmType.ADAPTIVE, AlgorithmType.BASELINE]
 CONNECTIVITY_LEVELS = [0.75, 0.40, 0.20]
 NUM_SEEDS = 5
 
-VALID_SEEDS_PATH = Path(__file__).resolve().parent.parent / "config" / "valid_seeds.json"
+VALID_SEEDS_PATH = (
+    Path(__file__).resolve().parent.parent / "configs" / "valid_seeds.json"
+)
 
 
 def _get_seeds(count: int) -> list[int]:
     if VALID_SEEDS_PATH.exists():
-        with open(VALID_SEEDS_PATH) as f:
+        with VALID_SEEDS_PATH.open() as f:
             data = json.load(f)
         seeds = [int(s) for s in data.get("valid_seeds", [])]
         if len(seeds) >= count:
@@ -67,12 +69,14 @@ def main():
                     random_seed=seed,
                 )
                 r = engine.run(run_number=i)
-                results[algo.value][conn].append({
-                    "seed": seed,
-                    "delivery_rate": r.delivery_rate,
-                    "delivery_time": r.average_delivery_time,
-                    "assignment_rate": r.assignment_rate,
-                })
+                results[algo.value][conn].append(
+                    {
+                        "seed": seed,
+                        "delivery_rate": r.delivery_rate,
+                        "delivery_time": r.average_delivery_time,
+                        "assignment_rate": r.assignment_rate,
+                    }
+                )
 
     elapsed = time.time() - t0
     print(f"\nCompleted in {elapsed:.1f}s\n")
@@ -93,29 +97,43 @@ def main():
             dt = [r["delivery_time"] for r in runs if r["delivery_time"] is not None]
             ar = [r["assignment_rate"] for r in runs]
 
-            dr_str = f"{mean(dr):.4f} ± {stdev(dr):.4f}" if len(dr) > 1 else f"{dr[0]:.4f}"
+            dr_str = (
+                f"{mean(dr):.4f} ± {stdev(dr):.4f}" if len(dr) > 1 else f"{dr[0]:.4f}"
+            )
             dt_str = (
-                f"{mean(dt):.1f} ± {stdev(dt):.1f}" if len(dt) > 1
+                f"{mean(dt):.1f} ± {stdev(dt):.1f}"
+                if len(dt) > 1
                 else (f"{dt[0]:.1f}" if dt else "N/A")
             )
-            ar_str = f"{mean(ar):.4f} ± {stdev(ar):.4f}" if len(ar) > 1 else f"{ar[0]:.4f}"
+            ar_str = (
+                f"{mean(ar):.4f} ± {stdev(ar):.4f}" if len(ar) > 1 else f"{ar[0]:.4f}"
+            )
 
-            print(f"{conn:5.2f}  {algo_name:>10s}  {dr_str:>14s}  {dt_str:>16s}  {ar_str:>14s}")
+            print(
+                f"{conn:5.2f}  {algo_name:>10s}  {dr_str:>14s}  {dt_str:>16s}  {ar_str:>14s}"
+            )
 
         # Check discrimination at this connectivity level
         a_dr = [r["delivery_rate"] for r in results["adaptive"][conn]]
         b_dr = [r["delivery_rate"] for r in results["baseline"][conn]]
-        a_dt = [r["delivery_time"] for r in results["adaptive"][conn] if r["delivery_time"] is not None]
-        b_dt = [r["delivery_time"] for r in results["baseline"][conn] if r["delivery_time"] is not None]
+        a_dt = [
+            r["delivery_time"]
+            for r in results["adaptive"][conn]
+            if r["delivery_time"] is not None
+        ]
+        b_dt = [
+            r["delivery_time"]
+            for r in results["baseline"][conn]
+            if r["delivery_time"] is not None
+        ]
 
         warn = False
-        if a_dt and b_dt:
-            if mean(a_dt) >= mean(b_dt):
-                print(
-                    f"  WARNING: algorithms not discriminating at conn={conn:.2f} "
-                    f"(Adaptive dt={mean(a_dt):.1f} >= Baseline dt={mean(b_dt):.1f})"
-                )
-                warn = True
+        if a_dt and b_dt and mean(a_dt) >= mean(b_dt):
+            print(
+                f"  WARNING: algorithms not discriminating at conn={conn:.2f} "
+                f"(Adaptive dt={mean(a_dt):.1f} >= Baseline dt={mean(b_dt):.1f})"
+            )
+            warn = True
         if mean(a_dr) < mean(b_dr) - 0.01:
             print(
                 f"  WARNING: Adaptive delivery_rate < Baseline at conn={conn:.2f} "
@@ -123,7 +141,7 @@ def main():
             )
             warn = True
         if not warn:
-            print(f"  OK")
+            print("  OK")
         print()
 
     print("=" * len(header))
@@ -133,15 +151,24 @@ def main():
     print(f"{'Seed':>6s}  {'Del.Rate':>10s}  {'Del.Time':>10s}  {'Assign.Rate':>12s}")
     print("-" * 44)
     for r in results["adaptive"][0.20]:
-        dt_str = f"{r['delivery_time']:.1f}" if r["delivery_time"] is not None else "N/A"
-        print(f"{r['seed']:6d}  {r['delivery_rate']:10.4f}  {dt_str:>10s}  {r['assignment_rate']:12.4f}")
+        dt_str = (
+            f"{r['delivery_time']:.1f}" if r["delivery_time"] is not None else "N/A"
+        )
+        print(
+            f"{r['seed']:6d}  {r['delivery_rate']:10.4f}  {dt_str:>10s}  {r['assignment_rate']:12.4f}"
+        )
 
-    a_dt_20 = [r["delivery_time"] for r in results["adaptive"][0.20] if r["delivery_time"] is not None]
+    a_dt_20 = [
+        r["delivery_time"]
+        for r in results["adaptive"][0.20]
+        if r["delivery_time"] is not None
+    ]
     if a_dt_20:
         mu = mean(a_dt_20)
         sd = stdev(a_dt_20) if len(a_dt_20) > 1 else 0.0
         outliers = [
-            r["seed"] for r in results["adaptive"][0.20]
+            r["seed"]
+            for r in results["adaptive"][0.20]
             if r["delivery_time"] is not None and abs(r["delivery_time"] - mu) > 2 * sd
         ]
         if outliers:

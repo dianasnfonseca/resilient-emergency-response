@@ -50,31 +50,42 @@ from ercs.visualization.animation import (
 
 def _run_simulation(args, config):
     """Run paired simulation and return frames + logs."""
+
     def progress(msg):
         print(f"  {msg}")
 
     t0 = time.time()
-    adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd = run_paired_simulation(
-        config=config,
-        connectivity_level=args.connectivity,
-        seed=args.seed,
-        sample_interval=args.sample_interval,
-        progress_callback=progress,
+    adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd = (
+        run_paired_simulation(
+            config=config,
+            connectivity_level=args.connectivity,
+            seed=args.seed,
+            sample_interval=args.sample_interval,
+            progress_callback=progress,
+        )
     )
     elapsed = time.time() - t0
 
     print(f"\nSimulations completed in {elapsed:.1f}s")
-    print(f"  Adaptive: {len(adaptive_frames)} frames, {len(adaptive_fwd)} forwarding events")
-    print(f"  Baseline: {len(baseline_frames)} frames, {len(baseline_fwd)} forwarding events")
+    print(
+        f"  Adaptive: {len(adaptive_frames)} frames, {len(adaptive_fwd)} forwarding events"
+    )
+    print(
+        f"  Baseline: {len(baseline_frames)} frames, {len(baseline_fwd)} forwarding events"
+    )
 
     if adaptive_frames:
         af = adaptive_frames[-1].metrics
         bf = baseline_frames[-1].metrics
-        print(f"\nFinal metrics:")
-        print(f"  Adaptive — assigned: {af.tasks_assigned}/{af.tasks_created}, "
-              f"delivered: {af.messages_delivered}/{af.messages_created}")
-        print(f"  Baseline — assigned: {bf.tasks_assigned}/{bf.tasks_created}, "
-              f"delivered: {bf.messages_delivered}/{bf.messages_created}")
+        print("\nFinal metrics:")
+        print(
+            f"  Adaptive — assigned: {af.tasks_assigned}/{af.tasks_created}, "
+            f"delivered: {af.messages_delivered}/{af.messages_created}"
+        )
+        print(
+            f"  Baseline — assigned: {bf.tasks_assigned}/{bf.tasks_created}, "
+            f"delivered: {bf.messages_delivered}/{bf.messages_created}"
+        )
 
     return adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd
 
@@ -103,13 +114,17 @@ def _mode_animation(args, config):
         Path(args.save).parent.mkdir(parents=True, exist_ok=True)
 
     print("\nCreating animation...")
-    anim = create_animation(
-        adaptive_frames, baseline_frames,
-        config=config, fps=args.fps, save_path=args.save,
+    create_animation(
+        adaptive_frames,
+        baseline_frames,
+        config=config,
+        fps=args.fps,
+        save_path=args.save,
     )
 
     if not args.no_display and not args.save:
         import matplotlib.pyplot as plt
+
         print("Displaying animation (close window to exit)...")
         plt.show()
 
@@ -122,7 +137,11 @@ def _mode_predictability(args, config):
 
     adaptive_frames, baseline_frames, _, _ = _run_simulation(args, config)
 
-    target = args.time if args.time is not None else config.scenario.simulation_duration_seconds / 2
+    target = (
+        args.time
+        if args.time is not None
+        else config.scenario.simulation_duration_seconds / 2
+    )
     print(f"\nGenerating predictability graph at t={target:.0f}s...")
 
     for label, frames in [("Adaptive", adaptive_frames), ("Baseline", baseline_frames)]:
@@ -138,6 +157,7 @@ def _mode_predictability(args, config):
 
     if not args.no_display:
         import matplotlib.pyplot as plt
+
         plt.show()
 
     return 0
@@ -149,7 +169,11 @@ def _mode_heatmap(args, config):
 
     adaptive_frames, baseline_frames, _, _ = _run_simulation(args, config)
 
-    target = args.time if args.time is not None else config.scenario.simulation_duration_seconds / 2
+    target = (
+        args.time
+        if args.time is not None
+        else config.scenario.simulation_duration_seconds / 2
+    )
     print(f"\nGenerating predictability heatmap at t={target:.0f}s...")
 
     for label, frames in [("Adaptive", adaptive_frames), ("Baseline", baseline_frames)]:
@@ -165,6 +189,7 @@ def _mode_heatmap(args, config):
 
     if not args.no_display:
         import matplotlib.pyplot as plt
+
         plt.show()
 
     return 0
@@ -189,6 +214,7 @@ def _mode_evolution(args, config):
 
     if not args.no_display:
         import matplotlib.pyplot as plt
+
         plt.show()
 
     return 0
@@ -201,7 +227,9 @@ def _mode_journey(args, config):
         plot_message_journey,
     )
 
-    adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd = _run_simulation(args, config)
+    adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd = _run_simulation(
+        args, config
+    )
 
     for label, frames, fwd_log in [
         ("Adaptive", adaptive_frames, adaptive_fwd),
@@ -218,6 +246,7 @@ def _mode_journey(args, config):
             msg_id = min(journeys.keys(), key=lambda m: journeys[m][0].timestamp)
         elif msg_id == "random":
             import random
+
             msg_id = random.choice(list(journeys.keys()))
 
         if msg_id not in journeys:
@@ -225,10 +254,16 @@ def _mode_journey(args, config):
             print(f"  Available: {list(journeys.keys())[:5]}...")
             continue
 
-        print(f"\n{label}: tracking message {msg_id[:16]}... ({len(journeys[msg_id])} hops)")
+        print(
+            f"\n{label}: tracking message {msg_id[:16]}... ({len(journeys[msg_id])} hops)"
+        )
 
         fig = plot_message_journey(
-            msg_id, journeys[msg_id], frames, config, algorithm_label=label,
+            msg_id,
+            journeys[msg_id],
+            frames,
+            config,
+            algorithm_label=label,
         )
         if args.save:
             stem = Path(args.save).stem
@@ -239,6 +274,7 @@ def _mode_journey(args, config):
 
     if not args.no_display:
         import matplotlib.pyplot as plt
+
         plt.show()
 
     return 0
@@ -248,7 +284,9 @@ def _mode_paths(args, config):
     """All message paths overview."""
     from ercs.visualization.diagnostics import plot_all_message_paths
 
-    adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd = _run_simulation(args, config)
+    adaptive_frames, baseline_frames, adaptive_fwd, baseline_fwd = _run_simulation(
+        args, config
+    )
 
     print("\nGenerating message paths overview...")
 
@@ -266,6 +304,7 @@ def _mode_paths(args, config):
 
     if not args.no_display:
         import matplotlib.pyplot as plt
+
         plt.show()
 
     return 0
@@ -279,7 +318,14 @@ def main() -> int:
     )
     parser.add_argument(
         "--mode",
-        choices=["animation", "predictability", "heatmap", "evolution", "journey", "paths"],
+        choices=[
+            "animation",
+            "predictability",
+            "heatmap",
+            "evolution",
+            "journey",
+            "paths",
+        ],
         default="animation",
         help="Visualization mode (default: animation)",
     )

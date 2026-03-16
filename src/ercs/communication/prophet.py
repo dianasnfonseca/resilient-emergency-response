@@ -465,9 +465,7 @@ class DeliveryPredictabilityMatrix:
         # Long time since last encounter — use full P_enc
         return self.p_enc_max
 
-    def update_encounter(
-        self, node_a: str, node_b: str, current_time: float
-    ) -> None:
+    def update_encounter(self, node_a: str, node_b: str, current_time: float) -> None:
         """
         Update predictability when two nodes encounter each other.
 

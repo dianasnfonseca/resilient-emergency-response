@@ -7,24 +7,22 @@ drifting out of sync with ``configs/default.yaml``.
 """
 
 import math
-import yaml
 from pathlib import Path
 
 import pytest
+import yaml
 
 from ercs.config.parameters import (
     CoordinationParameters,
     NetworkParameters,
+    ResponderRole,
     SimulationConfig,
 )
 from ercs.network.mobility import (
+    _assign_roles,
     _build_role_configs,
     _build_role_distribution,
-    _assign_roles,
-    RoleConfig,
 )
-from ercs.config.parameters import ResponderRole
-
 
 # Load the canonical default config
 CONFIG = SimulationConfig()
@@ -38,7 +36,7 @@ class TestYamlMatchesPydanticDefaults:
 
     @pytest.fixture(scope="class")
     def yaml_config(self):
-        with open(YAML_PATH) as f:
+        with YAML_PATH.open() as f:
             return yaml.safe_load(f)
 
     def test_network_params(self, yaml_config):
@@ -80,13 +78,21 @@ class TestYamlMatchesPydanticDefaults:
         c = yaml_config["communication"]
         assert c["message_ttl_seconds"] == CONFIG.communication.message_ttl_seconds
         assert c["transmit_speed_bps"] == CONFIG.communication.transmit_speed_bps
-        assert c["update_interval_seconds"] == CONFIG.communication.update_interval_seconds
-        assert c["min_predictability_threshold"] == CONFIG.communication.min_predictability_threshold
+        assert (
+            c["update_interval_seconds"] == CONFIG.communication.update_interval_seconds
+        )
+        assert (
+            c["min_predictability_threshold"]
+            == CONFIG.communication.min_predictability_threshold
+        )
 
     def test_scenario_params(self, yaml_config):
         s = yaml_config["scenario"]
         assert s["message_rate_per_minute"] == CONFIG.scenario.message_rate_per_minute
-        assert s["simulation_duration_seconds"] == CONFIG.scenario.simulation_duration_seconds
+        assert (
+            s["simulation_duration_seconds"]
+            == CONFIG.scenario.simulation_duration_seconds
+        )
         assert s["warmup_period_seconds"] == CONFIG.scenario.warmup_period_seconds
         assert s["runs_per_configuration"] == CONFIG.scenario.runs_per_configuration
 
@@ -98,15 +104,31 @@ class TestYamlMatchesPydanticDefaults:
 
     def test_coordination_params(self, yaml_config):
         c = yaml_config["coordination"]
-        assert c["update_interval_seconds"] == CONFIG.coordination.update_interval_seconds
-        assert c["available_path_threshold"] == CONFIG.coordination.available_path_threshold
-        assert c["workload_penalty_weight"] == CONFIG.coordination.workload_penalty_weight
-        assert c["recency_reference_seconds"] == CONFIG.coordination.recency_reference_seconds
+        assert (
+            c["update_interval_seconds"] == CONFIG.coordination.update_interval_seconds
+        )
+        assert (
+            c["available_path_threshold"]
+            == CONFIG.coordination.available_path_threshold
+        )
+        assert (
+            c["workload_penalty_weight"] == CONFIG.coordination.workload_penalty_weight
+        )
+        assert (
+            c["recency_reference_seconds"]
+            == CONFIG.coordination.recency_reference_seconds
+        )
 
     def test_mobility_intervals(self, yaml_config):
         net = yaml_config["network"]
-        assert net["mobility_update_interval_seconds"] == CONFIG.network.mobility_update_interval_seconds
-        assert net["encounter_check_interval_seconds"] == CONFIG.network.encounter_check_interval_seconds
+        assert (
+            net["mobility_update_interval_seconds"]
+            == CONFIG.network.mobility_update_interval_seconds
+        )
+        assert (
+            net["encounter_check_interval_seconds"]
+            == CONFIG.network.encounter_check_interval_seconds
+        )
         assert net["pause_min_seconds"] == CONFIG.network.pause_min_seconds
         assert net["pause_max_seconds"] == CONFIG.network.pause_max_seconds
 
@@ -116,8 +138,12 @@ class TestYamlMatchesPydanticDefaults:
         assert net["role_transport_fraction"] == CONFIG.network.role_transport_fraction
         assert net["role_rescue_speed_min"] == CONFIG.network.role_rescue_speed_min
         assert net["role_rescue_speed_max"] == CONFIG.network.role_rescue_speed_max
-        assert net["role_transport_speed_min"] == CONFIG.network.role_transport_speed_min
-        assert net["role_transport_speed_max"] == CONFIG.network.role_transport_speed_max
+        assert (
+            net["role_transport_speed_min"] == CONFIG.network.role_transport_speed_min
+        )
+        assert (
+            net["role_transport_speed_max"] == CONFIG.network.role_transport_speed_max
+        )
         assert net["role_liaison_speed_min"] == CONFIG.network.role_liaison_speed_min
         assert net["role_liaison_speed_max"] == CONFIG.network.role_liaison_speed_max
 
@@ -139,7 +165,11 @@ class TestComputedProperties:
         total = (
             CONFIG.network.role_rescue_fraction
             + CONFIG.network.role_transport_fraction
-            + (1.0 - CONFIG.network.role_rescue_fraction - CONFIG.network.role_transport_fraction)
+            + (
+                1.0
+                - CONFIG.network.role_rescue_fraction
+                - CONFIG.network.role_transport_fraction
+            )
         )
         assert total == pytest.approx(1.0)
 
@@ -153,8 +183,14 @@ class TestMobilityConfigConsistency:
 
         assert configs[ResponderRole.RESCUE].speed_min == params.role_rescue_speed_min
         assert configs[ResponderRole.RESCUE].speed_max == params.role_rescue_speed_max
-        assert configs[ResponderRole.TRANSPORT].speed_min == params.role_transport_speed_min
-        assert configs[ResponderRole.TRANSPORT].speed_max == params.role_transport_speed_max
+        assert (
+            configs[ResponderRole.TRANSPORT].speed_min
+            == params.role_transport_speed_min
+        )
+        assert (
+            configs[ResponderRole.TRANSPORT].speed_max
+            == params.role_transport_speed_max
+        )
         assert configs[ResponderRole.LIAISON].speed_min == params.role_liaison_speed_min
         assert configs[ResponderRole.LIAISON].speed_max == params.role_liaison_speed_max
 
@@ -164,7 +200,9 @@ class TestMobilityConfigConsistency:
 
         assert dist[ResponderRole.RESCUE] == params.role_rescue_fraction
         assert dist[ResponderRole.TRANSPORT] == params.role_transport_fraction
-        liaison_expected = 1.0 - params.role_rescue_fraction - params.role_transport_fraction
+        liaison_expected = (
+            1.0 - params.role_rescue_fraction - params.role_transport_fraction
+        )
         assert dist[ResponderRole.LIAISON] == pytest.approx(liaison_expected)
 
     def test_assign_roles_count(self):
@@ -175,7 +213,7 @@ class TestMobilityConfigConsistency:
         liaison_count = roles.count(ResponderRole.LIAISON)
         assert rescue_count == 29  # round(48 * 0.60)
         assert transport_count == 12  # round(48 * 0.25)
-        assert liaison_count == 7   # remainder
+        assert liaison_count == 7  # remainder
 
 
 class TestCoordinationConfigConsistency:
@@ -183,6 +221,7 @@ class TestCoordinationConfigConsistency:
 
     def test_adaptive_uses_config_weights(self):
         from ercs.coordination.algorithms import AdaptiveCoordinator
+
         params = CoordinationParameters()
         coord = AdaptiveCoordinator(params=params)
         assert coord.params.predictability_weight == 0.2
@@ -193,11 +232,13 @@ class TestCoordinationConfigConsistency:
 
     def test_area_diagonal_passed_through(self):
         from ercs.coordination.algorithms import create_coordinator
+
         coord = create_coordinator("adaptive", area_diagonal_m=1234.5)
         assert coord.area_diagonal_m == 1234.5
 
     def test_default_diagonal_computed(self):
         from ercs.coordination.algorithms import create_coordinator
+
         coord = create_coordinator("adaptive")
         expected = math.sqrt(3000.0**2 + 1500.0**2)
         assert coord.area_diagonal_m == pytest.approx(expected, rel=1e-6)

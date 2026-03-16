@@ -1,4 +1,13 @@
-"""Diagnostic script for the three anomalies in ERCS results."""
+"""Diagnostic script for the three anomalies in ERCS results.
+
+Investigates three anomalies observed in the experiment output:
+  1. Identical response_time and assignment_rate at 40% and 75% connectivity
+  2. PRoPHET P values exceeding P_enc_max = 0.5
+  3. High variance in Adaptive assignment_rate at 20% connectivity
+
+Usage:
+    python scripts/diagnose_anomalies.py
+"""
 
 import sys
 from pathlib import Path
@@ -67,22 +76,24 @@ def diagnose_anomaly1():
         if r.connectivity_level != 0.75 or r.run_number != 0:
             continue
         rt_by_cycle = defaultdict(list)
-        for task_id, rt in r.response_times:
-            # response_time = cycle_time - creation_time
-            # cycle_times are at 0, 1800, 3600, 5400
-            # So modulo 1800 should give us the creation_time offset
+        for _task_id, rt in r.response_times:
+            # Bucket response times by rounding to nearest 100
             rt_by_cycle[round(rt / 100) * 100].append(rt)
 
         print(f"\n  {r.algorithm.value}@{r.connectivity_level:.0%} run={r.run_number}:")
         print(f"    total_tasks={r.total_tasks}, assigned={r.tasks_assigned}")
-        print(f"    unassigned = tasks after last cycle = {r.total_tasks - r.tasks_assigned}")
+        print(
+            f"    unassigned = tasks after last cycle = {r.total_tasks - r.tasks_assigned}"
+        )
 
         # Count tasks per coordination cycle
         # Cycles at t=0, 1800, 3600, 5400
         # Tasks arrive uniformly 0-6000s
         # Tasks arriving 5400-6000 won't get a cycle
         expected_unassigned = r.total_tasks * (600 / 6000)
-        print(f"    expected unassigned (~tasks in last 600s): ~{expected_unassigned:.0f}")
+        print(
+            f"    expected unassigned (~tasks in last 600s): ~{expected_unassigned:.0f}"
+        )
 
 
 def diagnose_anomaly2():
@@ -98,7 +109,7 @@ def diagnose_anomaly2():
         connectivity_level=0.75,
         random_seed=42,
     )
-    result = engine.run(run_number=0)
+    engine.run(run_number=0)
 
     # Access the predictability matrix
     matrix = engine._communication.predictability
@@ -116,7 +127,9 @@ def diagnose_anomaly2():
                 coord_to_mobile_p.append(p)
 
     all_p = np.array(all_p) if all_p else np.array([0.0])
-    coord_to_mobile_p = np.array(coord_to_mobile_p) if coord_to_mobile_p else np.array([0.0])
+    coord_to_mobile_p = (
+        np.array(coord_to_mobile_p) if coord_to_mobile_p else np.array([0.0])
+    )
 
     print(f"\nAll P values (n={len(all_p)}):")
     print(f"  min={all_p.min():.4f}, max={all_p.max():.4f}")
@@ -127,9 +140,15 @@ def diagnose_anomaly2():
 
     print(f"\nCoord -> Mobile P values (n={len(coord_to_mobile_p)}):")
     print(f"  min={coord_to_mobile_p.min():.4f}, max={coord_to_mobile_p.max():.4f}")
-    print(f"  mean={coord_to_mobile_p.mean():.4f}, median={np.median(coord_to_mobile_p):.4f}")
-    print(f"  >0.3: {(coord_to_mobile_p > 0.3).sum()}/{len(coord_to_mobile_p)} ({(coord_to_mobile_p > 0.3).mean():.1%})")
-    print(f"  >0.5: {(coord_to_mobile_p > 0.5).sum()}/{len(coord_to_mobile_p)} ({(coord_to_mobile_p > 0.5).mean():.1%})")
+    print(
+        f"  mean={coord_to_mobile_p.mean():.4f}, median={np.median(coord_to_mobile_p):.4f}"
+    )
+    print(
+        f"  >0.3: {(coord_to_mobile_p > 0.3).sum()}/{len(coord_to_mobile_p)} ({(coord_to_mobile_p > 0.3).mean():.1%})"
+    )
+    print(
+        f"  >0.5: {(coord_to_mobile_p > 0.5).sum()}/{len(coord_to_mobile_p)} ({(coord_to_mobile_p > 0.5).mean():.1%})"
+    )
 
     # Mathematical demonstration: P_enc_max doesn't cap P
     print("\n--- Mathematical proof: repeated encounters exceed P_enc_max ---")
@@ -159,7 +178,9 @@ def diagnose_anomaly2():
 
         c2m = np.array(c2m) if c2m else np.array([0.0])
         n_above_03 = (c2m > 0.3).sum()
-        print(f"\nCoord->Mobile at {conn:.0%}: n_nonzero={len(c2m)}, >0.3: {n_above_03}/{len(coord_to_mobile_p)}")
+        print(
+            f"\nCoord->Mobile at {conn:.0%}: n_nonzero={len(c2m)}, >0.3: {n_above_03}/{len(coord_to_mobile_p)}"
+        )
         if len(c2m) > 0:
             print(f"  min={c2m.min():.4f}, max={c2m.max():.4f}, mean={c2m.mean():.4f}")
 
@@ -185,11 +206,15 @@ def diagnose_anomaly3():
 
         # Count failed assignments from coordinator events
         coordinator = engine._manager.coordinator
-        failed_events = coordinator.get_events_by_type(
-            coordinator._events[0].event_type.__class__("assignment_failed")
+        (
+            coordinator.get_events_by_type(
+                coordinator._events[0].event_type.__class__("assignment_failed")
+                if False
+                else None
+            )
             if False
-            else None
-        ) if False else []
+            else []
+        )
 
         # Use the coordinator stats directly
         stats = coordinator.statistics
@@ -210,10 +235,12 @@ def diagnose_anomaly3():
             for mid in mobile_ids:
                 if matrix.get_predictability(cid, mid) > 0.3:
                     p_above_threshold += 1
-        print(f"  coord->mobile pairs with P>0.3: {p_above_threshold} / {len(coord_ids) * len(mobile_ids)}")
+        print(
+            f"  coord->mobile pairs with P>0.3: {p_above_threshold} / {len(coord_ids) * len(mobile_ids)}"
+        )
 
     # Also check Baseline at 20% for comparison
-    print(f"\n--- Seed 42, Baseline @ 20% ---")
+    print("\n--- Seed 42, Baseline @ 20% ---")
     engine = SimulationEngine(
         config=config,
         algorithm_type=AlgorithmType.BASELINE,

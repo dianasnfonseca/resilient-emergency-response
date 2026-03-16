@@ -18,13 +18,13 @@ This script:
      - Runs 300 seconds of mobility to let nodes move into range
      - Checks whether ANY transport or liaison node encounters a coord node
        through an available link
-  2. Outputs ``config/valid_seeds.json`` with seeds that pass ALL levels
+  2. Outputs ``configs/valid_seeds.json`` with seeds that pass ALL levels
 
 Usage:
     python scripts/validate_seeds.py
 
 Output:
-    config/valid_seeds.json
+    configs/valid_seeds.json
 """
 
 import json
@@ -38,9 +38,8 @@ sys.path.insert(0, str(project_root / "src"))
 
 import numpy as np
 
-from ercs.config.parameters import SimulationConfig
+from ercs.config.parameters import ResponderRole, SimulationConfig
 from ercs.network.mobility import MobilityManager, _assign_roles
-from ercs.config.parameters import ResponderRole
 from ercs.network.topology import generate_topology
 
 
@@ -124,9 +123,10 @@ def validate_seed(
                 dx = bridge_pos[0] - coord_pos[0]
                 dy = bridge_pos[1] - coord_pos[1]
                 dist = np.sqrt(dx * dx + dy * dy)
-                if dist <= radio_range:
-                    if is_link_available(bridge_id, coord_id, connectivity_level, seed):
-                        return True
+                if dist <= radio_range and is_link_available(
+                    bridge_id, coord_id, connectivity_level, seed
+                ):
+                    return True
         return False
 
     if check_encounters():
@@ -162,11 +162,13 @@ def main():
     print("=" * 60)
     print(f"Candidate seeds: {candidate_range.start}..{candidate_range.stop - 1}")
     print(f"Connectivity levels: {connectivity_levels}")
-    print(f"Warmup duration: 300s")
+    print("Warmup duration: 300s")
     print()
 
     # Results: seed -> {level: pass/fail}
-    valid_per_level: dict[float, list[int]] = {level: [] for level in connectivity_levels}
+    valid_per_level: dict[float, list[int]] = {
+        level: [] for level in connectivity_levels
+    }
     valid_all_levels: list[int] = []
 
     start_time = time.time()
@@ -199,8 +201,12 @@ def main():
     print("-" * 60)
     print(f"Results ({elapsed:.1f}s):")
     for level in connectivity_levels:
-        print(f"  Connectivity {level:.2f}: {len(valid_per_level[level])}/{len(candidate_range)} seeds pass")
-    print(f"  ALL levels:       {len(valid_all_levels)}/{len(candidate_range)} seeds pass")
+        print(
+            f"  Connectivity {level:.2f}: {len(valid_per_level[level])}/{len(candidate_range)} seeds pass"
+        )
+    print(
+        f"  ALL levels:       {len(valid_all_levels)}/{len(candidate_range)} seeds pass"
+    )
     print()
 
     # Build output
@@ -218,11 +224,11 @@ def main():
     }
 
     # Write output
-    output_dir = project_root / "config"
+    output_dir = project_root / "configs"
     output_dir.mkdir(exist_ok=True)
     output_path = output_dir / "valid_seeds.json"
 
-    with open(output_path, "w") as f:
+    with output_path.open("w") as f:
         json.dump(output, f, indent=2)
 
     print(f"Written to {output_path}")

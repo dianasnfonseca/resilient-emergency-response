@@ -29,15 +29,12 @@ from ercs.config.parameters import SimulationConfig
 from ercs.network.topology import NodeType
 from ercs.visualization.animation import (
     COORDINATION_COLOR,
-    URGENCY_COLORS,
-    ZONE_STYLES,
     ForwardingEntry,
     FrameData,
     _draw_zones,
     _format_time,
 )
-from ercs.visualization.plots import COLORS, apply_thesis_style
-
+from ercs.visualization.plots import apply_thesis_style
 
 # ---------------------------------------------------------------------------
 # PRoPHET Predictability Graph
@@ -93,21 +90,39 @@ def plot_predictability_graph(
             widths.append(0.5 + 2.5 * norm(p_val))
 
     if segments:
-        lc = LineCollection(segments, colors=colors, linewidths=widths, alpha=0.6, zorder=1)
+        lc = LineCollection(
+            segments, colors=colors, linewidths=widths, alpha=0.6, zorder=1
+        )
         ax.add_collection(lc)
 
     # Draw nodes
-    coord_ids = [nid for nid, nt in frame.node_types.items() if nt == NodeType.COORDINATION.value]
-    mobile_ids = [nid for nid, nt in frame.node_types.items() if nt == NodeType.MOBILE_RESPONDER.value]
+    coord_ids = [
+        nid for nid, nt in frame.node_types.items() if nt == NodeType.COORDINATION.value
+    ]
+    mobile_ids = [
+        nid
+        for nid, nt in frame.node_types.items()
+        if nt == NodeType.MOBILE_RESPONDER.value
+    ]
 
     mx = [frame.node_positions[n][0] for n in mobile_ids if n in frame.node_positions]
     my = [frame.node_positions[n][1] for n in mobile_ids if n in frame.node_positions]
-    ax.scatter(mx, my, s=20, c="#555555", alpha=0.7, zorder=3, label="Mobile responders")
+    ax.scatter(
+        mx, my, s=20, c="#555555", alpha=0.7, zorder=3, label="Mobile responders"
+    )
 
     cx = [frame.node_positions[n][0] for n in coord_ids if n in frame.node_positions]
     cy = [frame.node_positions[n][1] for n in coord_ids if n in frame.node_positions]
-    ax.scatter(cx, cy, s=100, c=COORDINATION_COLOR, marker="s", zorder=4,
-               edgecolors="k", label="Coordination nodes")
+    ax.scatter(
+        cx,
+        cy,
+        s=100,
+        c=COORDINATION_COLOR,
+        marker="s",
+        zorder=4,
+        edgecolors="k",
+        label="Coordination nodes",
+    )
 
     # Colorbar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
@@ -124,9 +139,12 @@ def plot_predictability_graph(
 
     n_edges = sum(1 for p in frame.predictabilities.values() if p >= threshold)
     ax.text(
-        0.02, 0.02,
+        0.02,
+        0.02,
         f"Edges with P >= {threshold}: {n_edges}",
-        transform=ax.transAxes, fontsize=9, fontfamily="monospace",
+        transform=ax.transAxes,
+        fontsize=9,
+        fontfamily="monospace",
         bbox={"facecolor": "white", "alpha": 0.8, "boxstyle": "round,pad=0.3"},
     )
 
@@ -159,11 +177,11 @@ def plot_predictability_heatmap(
     apply_thesis_style()
 
     coord_ids = sorted(
-        nid for nid, nt in frame.node_types.items()
-        if nt == NodeType.COORDINATION.value
+        nid for nid, nt in frame.node_types.items() if nt == NodeType.COORDINATION.value
     )
     mobile_ids = sorted(
-        nid for nid, nt in frame.node_types.items()
+        nid
+        for nid, nt in frame.node_types.items()
         if nt == NodeType.MOBILE_RESPONDER.value
     )
 
@@ -179,7 +197,9 @@ def plot_predictability_heatmap(
         for j, dst in enumerate(col_ids):
             matrix[i, j] = frame.predictabilities.get((src, dst), 0.0)
 
-    fig, ax = plt.subplots(figsize=(max(10, len(col_ids) * 0.3), max(4, len(row_ids) * 0.6)))
+    fig, ax = plt.subplots(
+        figsize=(max(10, len(col_ids) * 0.3), max(4, len(row_ids) * 0.6))
+    )
 
     im = ax.imshow(matrix, cmap="viridis", vmin=0, vmax=1, aspect="auto")
 
@@ -198,8 +218,15 @@ def plot_predictability_heatmap(
                 val = matrix[i, j]
                 if val > 0.01:
                     text_color = "white" if val > 0.5 else "black"
-                    ax.text(j, i, f"{val:.2f}", ha="center", va="center",
-                            fontsize=6, color=text_color)
+                    ax.text(
+                        j,
+                        i,
+                        f"{val:.2f}",
+                        ha="center",
+                        va="center",
+                        fontsize=6,
+                        color=text_color,
+                    )
 
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("Delivery Predictability P", fontsize=10)
@@ -252,8 +279,14 @@ def plot_predictability_evolution(
 
     if not node_pairs:
         fig, ax = plt.subplots(figsize=(10, 5))
-        ax.text(0.5, 0.5, "No predictability data available",
-                ha="center", va="center", transform=ax.transAxes)
+        ax.text(
+            0.5,
+            0.5,
+            "No predictability data available",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+        )
         return fig
 
     fig, ax = plt.subplots(figsize=(12, 6))
@@ -264,8 +297,14 @@ def plot_predictability_evolution(
         values = [f.predictabilities.get((src, dst), 0.0) for f in frames]
         short_src = src.replace("mobile_", "m").replace("coord_", "C")
         short_dst = dst.replace("mobile_", "m").replace("coord_", "C")
-        ax.plot(timestamps, values, color=cmap(idx % 10), linewidth=1.2,
-                alpha=0.8, label=f"{short_src} → {short_dst}")
+        ax.plot(
+            timestamps,
+            values,
+            color=cmap(idx % 10),
+            linewidth=1.2,
+            alpha=0.8,
+            label=f"{short_src} → {short_dst}",
+        )
 
     ax.set_xlabel("Simulation Time (s)")
     ax.set_ylabel("Delivery Predictability P")
@@ -299,8 +338,8 @@ def find_message_journeys(
     for entry in forwarding_log:
         journeys[entry.message_id].append(entry)
 
-    for mid in journeys:
-        journeys[mid].sort(key=lambda e: e.timestamp)
+    for _mid, entries in journeys.items():
+        entries.sort(key=lambda e: e.timestamp)
 
     return dict(journeys)
 
@@ -328,8 +367,9 @@ def plot_message_journey(
     config = config or SimulationConfig()
     apply_thesis_style()
 
-    fig, (ax_map, ax_timeline) = plt.subplots(1, 2, figsize=(18, 7),
-                                               gridspec_kw={"width_ratios": [1.2, 1]})
+    fig, (ax_map, ax_timeline) = plt.subplots(
+        1, 2, figsize=(18, 7), gridspec_kw={"width_ratios": [1.2, 1]}
+    )
 
     # -- Left panel: spatial path --
     area = config.network.simulation_area
@@ -353,8 +393,15 @@ def plot_message_journey(
 
     # Determine source and destination from the journey entries
     if not journey:
-        ax_map.text(0.5, 0.5, "No hops recorded", ha="center", va="center",
-                    transform=ax_map.transAxes, fontsize=14)
+        ax_map.text(
+            0.5,
+            0.5,
+            "No hops recorded",
+            ha="center",
+            va="center",
+            transform=ax_map.transAxes,
+            fontsize=14,
+        )
         fig.tight_layout()
         return fig
 
@@ -381,15 +428,19 @@ def plot_message_journey(
 
         color_val = 0.3 + 0.7 * (idx / max(n_hops - 1, 1))
         color = cmap(color_val)
-        dx = pos_to[0] - pos_from[0]
-        dy = pos_to[1] - pos_from[1]
+        pos_to[0] - pos_from[0]
+        pos_to[1] - pos_from[1]
 
         ax_map.annotate(
-            "", xy=pos_to, xytext=pos_from,
-            arrowprops=dict(
-                arrowstyle="->", color=color, lw=1.5 + idx * 0.3,
-                connectionstyle="arc3,rad=0.1",
-            ),
+            "",
+            xy=pos_to,
+            xytext=pos_from,
+            arrowprops={
+                "arrowstyle": "->",
+                "color": color,
+                "lw": 1.5 + idx * 0.3,
+                "connectionstyle": "arc3,rad=0.1",
+            },
             zorder=3,
         )
 
@@ -398,13 +449,32 @@ def plot_message_journey(
     dst_pos = _pos_at_time(dest_node, journey[-1].timestamp)
 
     if src_pos:
-        ax_map.scatter(*src_pos, s=200, c=COORDINATION_COLOR, marker="*",
-                       zorder=5, edgecolors="k", linewidths=1, label="Source")
+        ax_map.scatter(
+            *src_pos,
+            s=200,
+            c=COORDINATION_COLOR,
+            marker="*",
+            zorder=5,
+            edgecolors="k",
+            linewidths=1,
+            label="Source",
+        )
     if dst_pos:
         marker_color = "#2CA02C" if delivered else "#D62728"
-        ax_map.scatter(*dst_pos, s=200, c=marker_color, marker="D",
-                       zorder=5, edgecolors="k", linewidths=1,
-                       label="Destination (delivered)" if delivered else "Destination (not delivered)")
+        ax_map.scatter(
+            *dst_pos,
+            s=200,
+            c=marker_color,
+            marker="D",
+            zorder=5,
+            edgecolors="k",
+            linewidths=1,
+            label=(
+                "Destination (delivered)"
+                if delivered
+                else "Destination (not delivered)"
+            ),
+        )
 
     ax_map.legend(loc="upper left", fontsize=8)
     ax_map.set_xlabel("X (metres)")
@@ -423,21 +493,27 @@ def plot_message_journey(
 
     node_y_pos = {n: i for i, n in enumerate(involved_nodes)}
 
-    for idx, entry in enumerate(journey):
+    for _idx, entry in enumerate(journey):
         y_from = node_y_pos[entry.from_node]
         y_to = node_y_pos[entry.to_node]
-        color = "#2CA02C" if entry.reason == "delivered" else (
-            "#2171B5" if entry.reason == "forwarded" else "#D62728"
+        color = (
+            "#2CA02C"
+            if entry.reason == "delivered"
+            else ("#2171B5" if entry.reason == "forwarded" else "#D62728")
         )
         ax_timeline.annotate(
-            "", xy=(entry.timestamp, y_to), xytext=(entry.timestamp, y_from),
-            arrowprops=dict(arrowstyle="->", color=color, lw=2),
+            "",
+            xy=(entry.timestamp, y_to),
+            xytext=(entry.timestamp, y_from),
+            arrowprops={"arrowstyle": "->", "color": color, "lw": 2},
         )
         ax_timeline.scatter(entry.timestamp, y_from, c=color, s=30, zorder=4)
         ax_timeline.scatter(entry.timestamp, y_to, c=color, s=30, zorder=4)
 
     ax_timeline.set_yticks(range(len(involved_nodes)))
-    short_names = [n.replace("mobile_", "m").replace("coord_", "C") for n in involved_nodes]
+    short_names = [
+        n.replace("mobile_", "m").replace("coord_", "C") for n in involved_nodes
+    ]
     ax_timeline.set_yticklabels(short_names, fontsize=8)
     ax_timeline.set_xlabel("Simulation Time (s)")
     ax_timeline.set_title("Message Timeline", fontsize=12, fontweight="bold")
@@ -445,6 +521,7 @@ def plot_message_journey(
 
     # Legend
     from matplotlib.lines import Line2D
+
     legend_elements = [
         Line2D([0], [0], color="#2171B5", lw=2, label="Forwarded"),
         Line2D([0], [0], color="#2CA02C", lw=2, label="Delivered"),
@@ -503,7 +580,7 @@ def plot_all_message_paths(
     delivered_segments = []
     undelivered_segments = []
 
-    for mid, hops in journeys.items():
+    for _mid, hops in journeys.items():
         was_delivered = any(h.reason == "delivered" for h in hops)
         for entry in hops:
             p1 = _pos(entry.from_node)
@@ -515,39 +592,75 @@ def plot_all_message_paths(
                     undelivered_segments.append([p1, p2])
 
     if delivered_segments:
-        lc_del = LineCollection(delivered_segments, colors="#2CA02C", alpha=0.3,
-                                linewidths=0.8, zorder=1)
+        lc_del = LineCollection(
+            delivered_segments, colors="#2CA02C", alpha=0.3, linewidths=0.8, zorder=1
+        )
         ax.add_collection(lc_del)
 
     if undelivered_segments:
-        lc_undel = LineCollection(undelivered_segments, colors="#D62728", alpha=0.2,
-                                  linewidths=0.5, zorder=1)
+        lc_undel = LineCollection(
+            undelivered_segments, colors="#D62728", alpha=0.2, linewidths=0.5, zorder=1
+        )
         ax.add_collection(lc_undel)
 
     # Draw nodes
-    coord_ids = [nid for nid, nt in last_frame.node_types.items()
-                 if nt == NodeType.COORDINATION.value]
-    mobile_ids = [nid for nid, nt in last_frame.node_types.items()
-                  if nt == NodeType.MOBILE_RESPONDER.value]
+    coord_ids = [
+        nid
+        for nid, nt in last_frame.node_types.items()
+        if nt == NodeType.COORDINATION.value
+    ]
+    mobile_ids = [
+        nid
+        for nid, nt in last_frame.node_types.items()
+        if nt == NodeType.MOBILE_RESPONDER.value
+    ]
 
-    mx = [last_frame.node_positions[n][0] for n in mobile_ids if n in last_frame.node_positions]
-    my = [last_frame.node_positions[n][1] for n in mobile_ids if n in last_frame.node_positions]
+    mx = [
+        last_frame.node_positions[n][0]
+        for n in mobile_ids
+        if n in last_frame.node_positions
+    ]
+    my = [
+        last_frame.node_positions[n][1]
+        for n in mobile_ids
+        if n in last_frame.node_positions
+    ]
     ax.scatter(mx, my, s=15, c="#555555", alpha=0.6, zorder=3)
 
-    cx = [last_frame.node_positions[n][0] for n in coord_ids if n in last_frame.node_positions]
-    cy = [last_frame.node_positions[n][1] for n in coord_ids if n in last_frame.node_positions]
-    ax.scatter(cx, cy, s=100, c=COORDINATION_COLOR, marker="s", zorder=4, edgecolors="k")
+    cx = [
+        last_frame.node_positions[n][0]
+        for n in coord_ids
+        if n in last_frame.node_positions
+    ]
+    cy = [
+        last_frame.node_positions[n][1]
+        for n in coord_ids
+        if n in last_frame.node_positions
+    ]
+    ax.scatter(
+        cx, cy, s=100, c=COORDINATION_COLOR, marker="s", zorder=4, edgecolors="k"
+    )
 
-    n_del = sum(1 for hops in journeys.values() if any(h.reason == "delivered" for h in hops))
+    n_del = sum(
+        1 for hops in journeys.values() if any(h.reason == "delivered" for h in hops)
+    )
     n_total = len(journeys)
     ax.text(
-        0.02, 0.02,
-        f"Messages: {n_del}/{n_total} delivered ({n_del/n_total:.0%})" if n_total else "No messages",
-        transform=ax.transAxes, fontsize=10, fontfamily="monospace",
+        0.02,
+        0.02,
+        (
+            f"Messages: {n_del}/{n_total} delivered ({n_del/n_total:.0%})"
+            if n_total
+            else "No messages"
+        ),
+        transform=ax.transAxes,
+        fontsize=10,
+        fontfamily="monospace",
         bbox={"facecolor": "white", "alpha": 0.8, "boxstyle": "round,pad=0.3"},
     )
 
     from matplotlib.lines import Line2D
+
     legend_elements = [
         Line2D([0], [0], color="#2CA02C", lw=2, alpha=0.6, label="Delivered path"),
         Line2D([0], [0], color="#D62728", lw=2, alpha=0.4, label="Undelivered path"),

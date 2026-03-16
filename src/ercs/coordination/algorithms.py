@@ -156,6 +156,7 @@ class CoordinatorBase(ABC):
             self.area_diagonal_m = area_diagonal_m
         else:
             import math
+
             self.area_diagonal_m = math.sqrt(3000.0**2 + 1500.0**2)
 
         # Event log
@@ -413,7 +414,10 @@ class AdaptiveCoordinator(CoordinatorBase):
 
             # Select responder
             responder_id, distance, predictability = self._select_responder(
-                task, responder_locator, network_state, coordination_node,
+                task,
+                responder_locator,
+                network_state,
+                coordination_node,
                 current_time=current_time,
                 all_coordination_nodes=all_coordination_nodes,
             )
@@ -547,22 +551,24 @@ class AdaptiveCoordinator(CoordinatorBase):
             delta_t = max(0.0, current_time - last_enc)
             r_norm = 1.0 - min(delta_t / t_ref, 1.0)
 
-            candidates.append({
-                "id": responder_id,
-                "predictability": predictability,
-                "distance": distance,
-                "recency": r_norm,
-                "last_encounter": last_enc,
-            })
+            candidates.append(
+                {
+                    "id": responder_id,
+                    "predictability": predictability,
+                    "distance": distance,
+                    "recency": r_norm,
+                    "last_encounter": last_enc,
+                }
+            )
 
         # No reachable candidates
         if not candidates:
             return None, 0.0, None
 
         # Static weights
-        alpha = self.params.predictability_weight   # 0.2
-        gamma_r = self.params.recency_weight        # 0.2
-        beta = self.params.proximity_weight          # 0.6
+        alpha = self.params.predictability_weight  # 0.2
+        gamma_r = self.params.recency_weight  # 0.2
+        beta = self.params.proximity_weight  # 0.6
 
         # Second pass: calculate weighted scores and select best
         best_responder = None
@@ -632,7 +638,7 @@ class BaselineCoordinator(CoordinatorBase):
         network_state: NetworkStateProvider | None,
         coordination_node: str,
         current_time: float,
-        all_coordination_nodes: list[str] | None = None,  # noqa: ARG002 - baseline ignores
+        all_coordination_nodes: list[str] | None = None,
     ) -> list[Assignment]:
         """
         Assign tasks using baseline algorithm.
@@ -671,7 +677,10 @@ class BaselineCoordinator(CoordinatorBase):
 
             # Select responder (proximity only)
             responder_id, distance, _ = self._select_responder(
-                task, responder_locator, network_state, coordination_node,
+                task,
+                responder_locator,
+                network_state,
+                coordination_node,
                 current_time=current_time,
             )
 
@@ -716,10 +725,10 @@ class BaselineCoordinator(CoordinatorBase):
         self,
         task: Task,
         responder_locator: ResponderLocator,
-        network_state: NetworkStateProvider | None,  # noqa: ARG002 - baseline ignores
-        coordination_node: str,  # noqa: ARG002 - baseline ignores
-        current_time: float = 0.0,  # noqa: ARG002 - baseline ignores
-        all_coordination_nodes: list[str] | None = None,  # noqa: ARG002 - baseline ignores
+        network_state: NetworkStateProvider | None,  # baseline ignores
+        coordination_node: str,  # baseline ignores
+        current_time: float = 0.0,  # baseline ignores
+        all_coordination_nodes: list[str] | None = None,
     ) -> tuple[str | None, float, float | None]:
         """
         Select nearest responder by proximity only.

@@ -148,18 +148,37 @@ select = [
     "RUF",    # Ruff-specific rules
 ]
 ignore = [
-    "E501",   # line too long (handled by black)
-    "B008",   # do not perform function calls in argument defaults
+    "E501",    # line too long (handled by black)
+    "B008",    # do not perform function calls in argument defaults
     "PLR0913", # too many arguments
     "PLR2004", # magic value comparison
+    "PLR0912", # too many branches (simulation engine complexity is inherent)
+    "PLR0915", # too many statements (simulation engine complexity is inherent)
+    "RUF001",  # ambiguous unicode in strings (intentional math symbols: ×, β, γ, η²)
+    "RUF002",  # ambiguous unicode in docstrings (intentional math symbols)
+    "RUF003",  # ambiguous unicode in comments (intentional math symbols)
+    "PLC0415", # import outside top-level (lazy imports for optional deps/circular avoidance)
+    "ARG002",  # unused method argument (protocol conformance in algorithm subclasses)
+]
+[tool.ruff.lint.extend-per-file-ignores]
+"src/ercs/simulation/engine.py" = [
+    "RUF012",  # mutable class default (dataclass-style event queue)
 ]
 fixable = ["ALL"]
 unfixable = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = [
-    "ARG",    # Unused arguments OK in tests
+    "ARG",     # Unused arguments OK in tests
     "PLR2004", # Magic values OK in tests
+]
+"scripts/**/*.py" = [
+    "E402",     # Module imports after sys.path manipulation
+    "PLC0415",  # Import outside top level (after sys.path setup)
+]
+"app/**/*.py" = [
+    "E402",     # Module imports after sys.path manipulation
+    "PLC0415",  # Import outside top level (after sys.path setup)
 ]
 
 [tool.ruff.lint.isort]
@@ -194,6 +213,27 @@ module = [
 ]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = [
+    "ercs.visualization.animation",
+    "ercs.visualization.diagnostics",
+    "ercs.visualization.plots",
+]
+disallow_untyped_defs = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+module = [
+    "ercs.simulation.engine",
+    "ercs.coordination.algorithms",
+    "ercs.network.topology",
+    "ercs.network.mobility",
+]
+# Engine/algorithms use late-initialized Optional attributes (set in run(), not __init__)
+# These are always non-None when accessed during simulation but mypy can't verify
+warn_return_any = false
+disallow_untyped_defs = false
+
 # =============================================================================
 # Pytest Configuration
 # =============================================================================
@@ -227,6 +267,7 @@ parallel = true
 omit = [
     "tests/*",
     "*/__pycache__/*",
+    "src/ercs/visualization/*",
 ]
 
 [tool.coverage.report]

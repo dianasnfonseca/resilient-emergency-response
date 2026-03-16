@@ -13,8 +13,13 @@ Tests cover:
 - Evaluation report generation
 """
 
-import pytest
 import numpy as np
+import pytest
+from conftest import (
+    CONNECTIVITY_MILD,
+    CONNECTIVITY_MODERATE,
+    CONNECTIVITY_SEVERE,
+)
 
 from ercs.config.parameters import AlgorithmType, SimulationConfig
 from ercs.evaluation import (
@@ -30,12 +35,6 @@ from ercs.evaluation import (
     evaluate_results,
 )
 from ercs.simulation.engine import SimulationResults
-
-from conftest import (
-    CONNECTIVITY_MILD,
-    CONNECTIVITY_MODERATE,
-    CONNECTIVITY_SEVERE,
-)
 
 # =============================================================================
 # Test Fixtures
@@ -55,7 +54,11 @@ def sample_results() -> list[SimulationResults]:
     np.random.seed(42)
 
     for algorithm in [AlgorithmType.ADAPTIVE, AlgorithmType.BASELINE]:
-        for connectivity in [CONNECTIVITY_MILD, CONNECTIVITY_MODERATE, CONNECTIVITY_SEVERE]:
+        for connectivity in [
+            CONNECTIVITY_MILD,
+            CONNECTIVITY_MODERATE,
+            CONNECTIVITY_SEVERE,
+        ]:
             for run in range(10):
                 result = SimulationResults(
                     config=config,
@@ -549,25 +552,37 @@ class TestUrgencyStratifiedDelivery:
 
         # 5 H tasks assigned, 3 delivered
         for i in range(5):
-            result.events.append(SimulationEvent(
-                event_type=SimulationEventType.TASK_ASSIGNED,
-                timestamp=100.0,
-                data={"task_id": f"h_{i}", "urgency": "H", "responder_id": f"r_{i}"},
-            ))
+            result.events.append(
+                SimulationEvent(
+                    event_type=SimulationEventType.TASK_ASSIGNED,
+                    timestamp=100.0,
+                    data={
+                        "task_id": f"h_{i}",
+                        "urgency": "H",
+                        "responder_id": f"r_{i}",
+                    },
+                )
+            )
         result.delivery_times = [
-            ("h_0", 50.0), ("h_1", 60.0), ("h_2", 70.0),
+            ("h_0", 50.0),
+            ("h_1", 60.0),
+            ("h_2", 70.0),
         ]
 
         # 10 M tasks assigned, 8 delivered
         for i in range(10):
-            result.events.append(SimulationEvent(
-                event_type=SimulationEventType.TASK_ASSIGNED,
-                timestamp=100.0,
-                data={"task_id": f"m_{i}", "urgency": "M", "responder_id": f"r_{i}"},
-            ))
-        result.delivery_times.extend([
-            (f"m_{i}", 50.0 + i) for i in range(8)
-        ])
+            result.events.append(
+                SimulationEvent(
+                    event_type=SimulationEventType.TASK_ASSIGNED,
+                    timestamp=100.0,
+                    data={
+                        "task_id": f"m_{i}",
+                        "urgency": "M",
+                        "responder_id": f"r_{i}",
+                    },
+                )
+            )
+        result.delivery_times.extend([(f"m_{i}", 50.0 + i) for i in range(8)])
 
         evaluator = PerformanceEvaluator([result])
         rates = evaluator.compute_urgency_stratified_delivery([result])
@@ -591,11 +606,13 @@ class TestUrgencyStratifiedDelivery:
         )
 
         # TASK_ASSIGNED events without urgency field
-        result.events.append(SimulationEvent(
-            event_type=SimulationEventType.TASK_ASSIGNED,
-            timestamp=100.0,
-            data={"task_id": "t_0", "responder_id": "r_0"},
-        ))
+        result.events.append(
+            SimulationEvent(
+                event_type=SimulationEventType.TASK_ASSIGNED,
+                timestamp=100.0,
+                data={"task_id": "t_0", "responder_id": "r_0"},
+            )
+        )
 
         evaluator = PerformanceEvaluator([result])
         rates = evaluator.compute_urgency_stratified_delivery([result])
