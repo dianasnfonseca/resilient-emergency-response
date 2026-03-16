@@ -24,8 +24,6 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Literal
 
-import numpy as np
-
 from ercs.communication.prophet import (
     CommunicationLayer,
     MessageStatus,
@@ -291,8 +289,6 @@ class SimulationEngine:
         self.algorithm_type = algorithm_type
         self.connectivity_level = connectivity_level
         self.random_seed = random_seed
-
-        self._rng = np.random.default_rng(random_seed)
 
         # Simulation state
         self._current_time = 0.0
@@ -821,7 +817,7 @@ class SimulationEngine:
         # New links: connection-up → full PRoPHET encounter + transitivity
         new_links = current_links - self._active_links
 
-        for node_a, node_b in new_links:
+        for node_a, node_b in sorted(new_links):
             delivered = self._communication.process_encounter(
                 node_a=node_a,
                 node_b=node_b,
@@ -832,7 +828,7 @@ class SimulationEngine:
         # Existing links: transfer messages only (no encounter/transitivity)
         existing_links = current_links & self._active_links
 
-        for node_a, node_b in existing_links:
+        for node_a, node_b in sorted(existing_links):
             delivered = self._communication.transfer_messages(
                 node_a=node_a,
                 node_b=node_b,
